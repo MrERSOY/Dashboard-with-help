@@ -2,7 +2,7 @@
 "use client"; // Bu sayfa artık etkileşimli olacağı için Client Component
 
 import { useState } from "react";
-import type { Metadata } from "next";
+// import type { Metadata } from 'next'; // KULLANILMADIĞI İÇİN KALDIRILDI
 import { Responsive, WidthProvider, Layout } from "react-grid-layout";
 import {
   BarChart3,
@@ -43,14 +43,20 @@ ChartJS.register(
 import "react-grid-layout/css/styles.css";
 import "react-resizable/css/styles.css";
 
-// export const metadata: Metadata = { // Client Component'lerde metadata bu şekilde kullanılamaz.
-//   title: "Yapılandırılabilir Gösterge Paneli | Dashboard",
-// };
-
 //--- VERİ MODELLERİ ---
 
+// Tek bir metrik için tip tanımı
+type Metric = {
+  id: string;
+  title: string;
+  value: string;
+  change: string;
+  changeType: "up" | "down";
+  icon: React.ElementType;
+};
+
 // Mevcut tüm metriklerin tanımı
-const allMetrics = {
+const allMetrics: Record<string, Metric> = {
   totalRevenue: {
     id: "totalRevenue",
     title: "Toplam Ciro",
@@ -106,12 +112,11 @@ const generateChartData = (label: string) => {
 
 //--- YARDIMCI BİLEŞENLER ---
 
-// Her bir istatistik kartını render eden bileşen
 const Widget = ({
   metric,
   onShowChart,
 }: {
-  metric: (typeof allMetrics)[keyof typeof allMetrics];
+  metric: Metric;
   onShowChart: () => void;
 }) => (
   <div className="rounded-xl border bg-card text-card-foreground shadow w-full h-full flex flex-col p-6">
@@ -144,12 +149,12 @@ const Widget = ({
   </div>
 );
 
-// Grafik gösteren Modal bileşeni
+// 'any' yerine daha spesifik 'Metric' tipi kullanıldı
 const ChartModal = ({
   metric,
   onClose,
 }: {
-  metric: any;
+  metric: Metric;
   onClose: () => void;
 }) => (
   <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
@@ -184,7 +189,8 @@ export default function DashboardPage() {
     { i: "growthRate", x: 3, y: 0, w: 1, h: 1 },
   ]);
 
-  const [modalData, setModalData] = useState<any>(null);
+  // 'any' yerine 'Metric | null' tipi kullanıldı
+  const [modalData, setModalData] = useState<Metric | null>(null);
 
   return (
     <div>
@@ -201,16 +207,14 @@ export default function DashboardPage() {
         layouts={{ lg: layout }}
         breakpoints={{ lg: 1200, md: 996, sm: 768, xs: 480, xxs: 0 }}
         cols={{ lg: 4, md: 2, sm: 1, xs: 1, xxs: 1 }}
-        rowHeight={200} // Her bir satırın yüksekliği
+        rowHeight={200}
         onLayoutChange={(newLayout) => setLayout(newLayout)}
       >
         {layout.map((item) => (
           <div key={item.i} className="flex items-center justify-center">
             <Widget
-              metric={allMetrics[item.i as keyof typeof allMetrics]}
-              onShowChart={() =>
-                setModalData(allMetrics[item.i as keyof typeof allMetrics])
-              }
+              metric={allMetrics[item.i]}
+              onShowChart={() => setModalData(allMetrics[item.i])}
             />
           </div>
         ))}

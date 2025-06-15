@@ -1,39 +1,81 @@
-// components/UserList.js
-'use client';
+// components/UserList.tsx
+"use client"; // Eğer gelecekte state veya etkileşim eklenirse
 
-import { useState, useEffect } from 'react';
+import React from "react";
+import Image from "next/image";
 
-function UserList() {
-  const = useState(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState(null);
+// Örnek Kullanıcı Veri Tipi
+interface User {
+  id: string;
+  name: string;
+  email: string;
+  role: string;
+  avatar: string;
+  status: "Aktif" | "Pasif" | "Beklemede";
+}
 
-  useEffect(() => {
-    const fetchUsers = async () => {
-      try {
-        setIsLoading(true);
-        const response = await fetch('/api/users');
-        if (!response.ok) {
-          throw new Error('Failed to fetch users');
-        }
-        const users = await response.json();
-        setData(users);
-      } catch (err) {
-        setError(err.message);
-      } finally {
-        setIsLoading(false);
-      }
-    };
+// Örnek Kullanıcı Verisi (Bu veriyi projenize göre özelleştirebilirsiniz)
+const teamMembers: User[] = [
+  {
+    id: "u01",
+    name: "Ali Veli",
+    email: "ali.veli@acme.com",
+    role: "Yönetici",
+    avatar: "/images/avatars/avatar-1.png",
+    status: "Aktif",
+  },
+  {
+    id: "u02",
+    name: "Ayşe Fatma",
+    email: "ayse.f@acme.com",
+    role: "Editör",
+    avatar: "/images/avatars/avatar-2.png",
+    status: "Aktif",
+  },
+];
 
-    fetchUsers();
-  },); // Sadece bir kere çalışır, ancak önbellekleme, yeniden doğrulama gibi özellikleri yoktur.
-
-  if (isLoading) return <div>Loading...</div>;
-  if (error) return <div>Error: {error}</div>;
-
+export default function UserList() {
   return (
-    <ul>
-      {data?.map(user => <li key={user.id}>{user.name}</li>)}
-    </ul>
+    <div className="bg-white rounded-lg shadow overflow-hidden">
+      <ul className="divide-y divide-gray-200">
+        {teamMembers.map((member) => (
+          <li
+            key={member.id}
+            className="p-4 flex items-center justify-between hover:bg-gray-50"
+          >
+            <div className="flex items-center gap-4">
+              <Image
+                src={member.avatar}
+                alt={member.name}
+                width={40}
+                height={40}
+                className="rounded-full"
+              />
+              <div>
+                <p className="text-sm font-semibold text-gray-900">
+                  {member.name}
+                </p>
+                <p className="text-sm text-gray-500">{member.email}</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-4">
+              <p className="text-sm text-gray-600">{member.role}</p>
+              <span
+                className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
+                  member.status === "Aktif"
+                    ? "bg-green-100 text-green-800"
+                    : member.status === "Beklemede"
+                    ? "bg-yellow-100 text-yellow-800"
+                    : "bg-gray-100 text-gray-800"
+                }`}
+              >
+                {member.status}
+              </span>
+              <button className="text-gray-400 hover:text-gray-600">...</button>
+            </div>
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }
