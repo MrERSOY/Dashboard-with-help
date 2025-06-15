@@ -1,6 +1,6 @@
 // app/layout.tsx
 import type { Metadata } from "next";
-import { Geist } from "next/font/google"; // Geist ve Geist_Mono importları düzeltildi
+import { Geist } from "next/font/google";
 import { Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { ThemeProvider } from "@/components/providers/theme-provider";
@@ -8,13 +8,11 @@ import { ActiveThemeProvider } from "@/components/active-theme";
 import { cookies } from "next/headers";
 import { cn } from "@/lib/utils";
 
-// META_THEME_COLORS şimdi metadata içinde kullanılıyor.
 const META_THEME_COLORS = {
   light: "#ffffff",
-  dark: "#09090b", // Tırnak işaretleri eklendi
+  dark: "#09090b",
 };
 
-// geistSans ve geistMono şimdi body className'inde kullanılıyor.
 const geistSans = Geist({
   variable: "--font-geist-sans",
   subsets: ["latin"],
@@ -46,18 +44,15 @@ export default async function RootLayout({
 
   return (
     <html lang="en" suppressHydrationWarning>
-           {" "}
       <body
         className={cn(
-          // Kullanılmayan değişken hatalarını gidermek için font değişkenleri ve
-          // isScaled durumu className'e eklendi.
+          // Font ve ölçekleme değişkenleri burada kullanılarak "unused var" hataları giderildi.
           geistSans.variable,
           geistMono.variable,
           "text-foreground group/body overscroll-none font-sans antialiased [--footer-height:calc(var(--spacing)*14)] [--header-height:calc(var(--spacing)*14)] xl:[--footer-height:calc(var(--spacing)*24)]",
-          isScaled && "scaled-active" // isScaled kullanıldığında bir class ekler
+          isScaled && "scaled-active"
         )}
       >
-               {" "}
         <ThemeProvider
           attribute="class"
           defaultTheme="system"
@@ -65,15 +60,11 @@ export default async function RootLayout({
           disableTransitionOnChange
           enableColorScheme
         >
-                   {" "}
           <ActiveThemeProvider initialTheme={activeTheme}>
-                        {children}         {" "}
+            {children}
           </ActiveThemeProvider>
-                 {" "}
         </ThemeProvider>
-             {" "}
       </body>
-         {" "}
     </html>
   );
 }
