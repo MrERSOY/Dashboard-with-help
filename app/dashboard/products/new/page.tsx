@@ -1,131 +1,195 @@
 // app/dashboard/products/new/page.tsx
-"use client"; // Form ve hook'lar için Client Component
+"use client";
 
-import { useState, FormEvent, useEffect, Suspense } from "react";
+import { Suspense } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
+import { Toaster, toast } from "sonner";
+import { supabase } from "@/lib/supabase";
+
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { BarcodeScanner } from "@/components/ui/barcode-scanner"; // Barkod okuyucu bileşenimiz
-import { Camera, X } from "lucide-react";
+import { Textarea } from "@/components/ui/textarea";
+import { Camera, X, Upload } from "lucide-react";
+import { useState, useEffect } from "react";
+import { BarcodeScanner } from "@/components/ui/barcode-scanner";
 
-// Form verisi için tip tanımı güncellendi
-interface ProductFormData {
-  name: string;
-  description: string;
-  category: string;
-  price: number;
-  stock: number;
-  barcode: string; // Barkod alanı eklendi
-}
+// Zod ile form şeması (API ile aynı olmalı)
+const productFormSchema = z.object({
+  name: z.string().min(3, { message: "Ürün adı en az 3 karakter olmalıdır." }),
+  description: z.string().optional(),
+  category: z.string({ required_error: "Lütfen bir kategori seçin." }),
+  price: z.coerce
+    .number({ invalid_type_error: "Lütfen geçerli bir fiyat girin." })
+    .min(0),
+  stock: z.coerce
+    .number({ invalid_type_error: "Lütfen geçerli bir stok girin." })
+    .int(),
+  barcode: z.string().min(1, { message: "Barkod alanı zorunludur." }),
+});
 
-// Suspense içinde kullanılacak asıl form bileşeni
+type ProductFormData = z.infer<typeof productFormSchema>;
+
 function NewProductForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const barcodeFromUrl = searchParams.get("barcode");
 
-  const [formData, setFormData] = useState<ProductFormData>({
-    name: "",
-    description: "",
-    category: "Elektronik",
-    price: 0,
-    stock: 0,
-    barcode: "",
-  });
-  const [isLoading, setIsLoading] = useState(false);
-  const [showScanner, setShowScanner] = useState(false); // Kamera modal'ının durumunu tutar
+  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
 
-  // URL'den gelen barkodu state'e atamak için useEffect
+  const {
+    register,
+    handleSubmit,
+    setValue,
+    formState: { errors, isSubmitting },
+  } = useForm<ProductFormData>({
+    resolver: zodResolver(productFormSchema),
+    defaultValues: {
+      category: "Elektronik",
+      barcode: barcodeFromUrl || "",
+    },
+  });
+
   useEffect(() => {
     if (barcodeFromUrl) {
-      setFormData((prevState) => ({ ...prevState, barcode: barcodeFromUrl }));
+      setValue("barcode", barcodeFromUrl, { shouldValidate: true });
     }
-  }, [barcodeFromUrl]);
+  }, [barcodeFromUrl, setValue]);
 
-  const handleInputChange = (
-    e: React.ChangeEvent<
-      HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement
-    >
-  ) => {
-    const { name, value } = e.target;
-    setFormData((prevState) => ({
-      ...prevState,
-      [name]: name === "price" || name === "stock" ? Number(value) : value,
-    }));
+  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      const file = e.target.files[0];
+      setImageFile(file);
+      setImagePreview(URL.createObjectURL(file));
+    }
   };
 
-  // Barkod başarıyla okunduğunda çalışacak fonksiyon
-  const handleScanComplete = (scannedBarcode: string) => {
-    setFormData((prevState) => ({ ...prevState, barcode: scannedBarcode }));
-    setShowScanner(false); // Tarayıcıyı kapat
-  };
+  const onSubmit = async (data: ProductFormData) => {
+    const promise = new Promise(async (resolve, reject) => {
+      try {
+        let imageUrl: string | null = null;
 
-  const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    setIsLoading(true);
+        if (imageFile) {
+          const filePath = `public/${Date.now()}_${imageFile.name}`;
+          const { error: uploadError } = await supabase.storage
+            .from("product_images")
+            .upload(filePath, imageFile);
 
-    console.log("Gönderilen Form Verisi:", formData);
-    // Gerçek API isteği buraya gelecek
-    await new Promise((resolve) => setTimeout(resolve, 1500));
+          if (uploadError) {
+            throw new Error("Resim yüklenemedi: " + uploadError.message);
+          }
 
-    setIsLoading(false);
-    alert(`'${formData.name}' ürünü başarıyla eklendi! (Simülasyon)`);
-    router.push("/dashboard/products");
+          const { data: urlData } = supabase.storage
+            .from("product_images")
+            .getPublicUrl(filePath);
+          imageUrl = urlData.publicUrl;
+        }
+
+        const response = await fetch("/api/products", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ...data, image_url: imageUrl }),
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.error || "Ürün oluşturulamadı.");
+        }
+
+        const newProduct = await response.json();
+        resolve(newProduct);
+      } catch (error) {
+        reject(error);
+      }
+    });
+
+    toast.promise(promise, {
+      loading: "Ürün kaydediliyor...",
+      success: (product: any) => {
+        router.push("/dashboard/products");
+        return `'${product.name}' ürünü başarıyla eklendi!`;
+      },
+      error: (err: any) => err.message,
+    });
   };
 
   return (
     <>
-      <form onSubmit={handleSubmit}>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {/* Barkod Alanı ve Tara Butonu */}
-          <div className="md:col-span-2">
-            <label
-              htmlFor="barcode"
-              className="block text-sm font-medium text-gray-700 mb-1"
-            >
-              Barkod
-            </label>
-            <div className="flex gap-2">
-              <Input
-                type="text"
-                id="barcode"
-                name="barcode"
-                value={formData.barcode}
-                onChange={handleInputChange}
-                placeholder="Ürün barkodunu girin veya taratın"
-                required
-                className="block w-full"
+      <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
+        {/* Görsel Yükleme Alanı */}
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Ürün Görseli
+          </label>
+          <div className="flex items-center gap-4">
+            {imagePreview ? (
+              <img
+                src={imagePreview}
+                alt="Ürün Önizleme"
+                className="w-24 h-24 rounded-lg object-cover border"
               />
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => setShowScanner(true)}
+            ) : (
+              <div className="w-24 h-24 rounded-lg bg-gray-200 flex items-center justify-center text-gray-500 text-sm p-2 text-center">
+                Görsel Yok
+              </div>
+            )}
+            <div>
+              <label
+                htmlFor="image-upload"
+                className="cursor-pointer inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700"
               >
-                <Camera className="h-4 w-4 mr-2" />
-                Tara
-              </Button>
+                <Upload className="mr-2 h-4 w-4" />
+                Görsel Seç
+              </label>
+              <input
+                id="image-upload"
+                name="image-upload"
+                type="file"
+                className="sr-only"
+                onChange={handleImageChange}
+                accept="image/*"
+              />
+              <p className="text-xs text-gray-500 mt-2">
+                PNG, JPG, GIF (MAX. 2MB)
+              </p>
             </div>
           </div>
+        </div>
 
-          {/* Diğer Form Alanları... */}
-          <div className="md:col-span-2">
-            <label
-              htmlFor="name"
-              className="block text-sm font-medium text-gray-700 mb-1"
-            >
-              Ürün Adı
-            </label>
-            <Input
-              type="text"
-              id="name"
-              name="name"
-              value={formData.name}
-              onChange={handleInputChange}
-              required
-              className="block w-full"
-            />
-          </div>
+        {/* Diğer Form Alanları */}
+        <div>
+          <label
+            htmlFor="name"
+            className="block text-sm font-medium text-gray-700 mb-1"
+          >
+            Ürün Adı
+          </label>
+          <Input id="name" {...register("name")} />
+          {errors.name && (
+            <p className="text-sm text-red-500 mt-1">{errors.name.message}</p>
+          )}
+        </div>
+
+        <div>
+          <label
+            htmlFor="barcode"
+            className="block text-sm font-medium text-gray-700 mb-1"
+          >
+            Barkod
+          </label>
+          <Input id="barcode" {...register("barcode")} />
+          {errors.barcode && (
+            <p className="text-sm text-red-500 mt-1">
+              {errors.barcode.message}
+            </p>
+          )}
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <div>
             <label
               htmlFor="category"
@@ -135,16 +199,11 @@ function NewProductForm() {
             </label>
             <select
               id="category"
-              name="category"
-              value={formData.category}
-              onChange={handleInputChange}
-              required
-              className="block w-full px-3 py-2 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+              {...register("category")}
+              className="block w-full h-10 px-3 border border-input rounded-md"
             >
-              <option>Elektronik</option>
-              <option>Aksesuar</option>
+              <option>Elektronik</option> <option>Aksesuar</option>{" "}
               <option>Giyim</option>
-              <option>Diğer</option>
             </select>
           </div>
           <div>
@@ -155,15 +214,16 @@ function NewProductForm() {
               Fiyat (₺)
             </label>
             <Input
-              type="number"
               id="price"
-              name="price"
-              min="0"
+              type="number"
               step="0.01"
-              value={formData.price}
-              onChange={handleInputChange}
-              required
+              {...register("price")}
             />
+            {errors.price && (
+              <p className="text-sm text-red-500 mt-1">
+                {errors.price.message}
+              </p>
+            )}
           </div>
           <div>
             <label
@@ -172,78 +232,47 @@ function NewProductForm() {
             >
               Stok Adedi
             </label>
-            <Input
-              type="number"
-              id="stock"
-              name="stock"
-              min="0"
-              step="1"
-              value={formData.stock}
-              onChange={handleInputChange}
-              required
-            />
-          </div>
-          <div className="md:col-span-2">
-            <label
-              htmlFor="description"
-              className="block text-sm font-medium text-gray-700 mb-1"
-            >
-              Ürün Açıklaması
-            </label>
-            <textarea
-              id="description"
-              name="description"
-              rows={4}
-              value={formData.description}
-              onChange={handleInputChange}
-              className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
-            ></textarea>
+            <Input id="stock" type="number" step="1" {...register("stock")} />
+            {errors.stock && (
+              <p className="text-sm text-red-500 mt-1">
+                {errors.stock.message}
+              </p>
+            )}
           </div>
         </div>
-        <div className="mt-8 pt-5 border-t border-gray-200 flex justify-end">
-          <Button type="submit" disabled={isLoading}>
-            {isLoading ? "Kaydediliyor..." : "Ürünü Kaydet"}
+
+        <div>
+          <label
+            htmlFor="description"
+            className="block text-sm font-medium text-gray-700 mb-1"
+          >
+            Ürün Açıklaması
+          </label>
+          <Textarea id="description" {...register("description")} />
+        </div>
+
+        <div className="mt-8 pt-5 border-t flex justify-end">
+          <Button type="submit" disabled={isSubmitting}>
+            {isSubmitting ? "Kaydediliyor..." : "Ürünü Kaydet"}
           </Button>
         </div>
       </form>
-
-      {/* Barkod Okuyucu Modalı */}
-      {showScanner && (
-        <div className="fixed inset-0 z-50 bg-black bg-opacity-75 flex items-center justify-center p-4">
-          <div className="bg-white rounded-lg shadow-xl w-full max-w-lg p-4 relative">
-            <h3 className="text-lg font-medium mb-4">Barkodu Okutun</h3>
-            <button
-              onClick={() => setShowScanner(false)}
-              className="absolute top-2 right-2 p-1 rounded-full bg-gray-100 hover:bg-gray-200"
-            >
-              <X size={20} />
-            </button>
-            <BarcodeScanner
-              onScanSuccess={handleScanComplete}
-              onScanError={(error) => console.error(error)}
-            />
-          </div>
-        </div>
-      )}
     </>
   );
 }
 
-// Ana sayfa bileşeni, Suspense sarmalayıcısı kullanır
 export default function NewProductPage() {
   return (
     <div>
+      <Toaster richColors position="top-right" />
       <div className="flex justify-between items-center mb-6">
         <h2 className="text-2xl font-semibold text-gray-800">Yeni Ürün Ekle</h2>
-        <Link
-          href="/dashboard/products"
-          className="px-4 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-700 transition duration-150"
-        >
-          &larr; Geri Dön
+        <Link href="/dashboard/products">
+          <Button variant="outline">&larr; Geri Dön</Button>
         </Link>
       </div>
       <div className="bg-white p-6 sm:p-8 rounded-lg shadow-md">
-        <Suspense fallback={<div>Yükleniyor...</div>}>
+        <Suspense fallback={<div>Form yükleniyor...</div>}>
           <NewProductForm />
         </Suspense>
       </div>

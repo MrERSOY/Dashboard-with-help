@@ -1,33 +1,46 @@
 // app/dashboard/products/page.tsx
-"use client"; // Arama ve sayfalama state'lerini yönetmek için Client Component
+"use client"; // Arama, sayfalama ve gerçek zamanlı güncellemeler için
 
 import { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
-import ProductImage from "@/components/ProductImage"; // ProductImage bileşeninin yolu
+import { supabase } from "@/lib/supabase";
+import ProductImage from "@/components/ProductImage";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Search, ChevronLeft, ChevronRight } from "lucide-react";
+import { Search, ChevronLeft, ChevronRight, ListFilter } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
-// API'den gelen veriye göre Product tipi
-interface ApiProduct {
-  id: number;
-  title: string;
-  category: string;
-  price: number;
-  stock: number;
-  thumbnail: string;
-}
-
-// Sayfada kullanacağımız Product tipi
+// Veritabanı tablomuzla eşleşen Product tipi
 interface Product {
   id: string;
   name: string;
   category: string;
   price: number;
   stock: number;
-  status: "Yayında" | "Stokta Yok";
-  imageUrl?: string;
+  image_url?: string;
 }
+
+// Önceden tanımlanmış, kapsamlı kategori listesi ("Süpermarket" -> "Gıda" olarak güncellendi)
+const allCategories = [
+  "Elektronik",
+  "Giyim & Moda",
+  "Ev, Yaşam & Bahçe",
+  "Kozmetik & Kişisel Bakım",
+  "Anne & Bebek",
+  "Kitap, Müzik & Film",
+  "Spor & Outdoor",
+  "Oyuncak & Hobi",
+  "Gıda", // Güncellendi
+  "Otomotiv & Motosiklet",
+  "Yapı Market",
+];
 
 export default function ProductsPage() {
   const [allProducts, setAllProducts] = useState<Product[]>([]);
@@ -35,52 +48,99 @@ export default function ProductsPage() {
   const [error, setError] = useState<string | null>(null);
 
   const [searchTerm, setSearchTerm] = useState("");
+  const [selectedCategories, setSelectedCategories] = useState<string[]>([]); // Kategori filtresi için string array
   const [currentPage, setCurrentPage] = useState(1);
-  const ITEMS_PER_PAGE = 10; // Sayfa başına gösterilecek ürün sayısı
+  const ITEMS_PER_PAGE = 10;
 
-  // Veri çekme işlemini useEffect içinde yapıyoruz
+  // Bileşen ilk yüklendiğinde verileri çekmek için
   useEffect(() => {
-    async function fetchProducts() {
+    async function fetchInitialProducts() {
       setIsLoading(true);
       setError(null);
       try {
-        // Sayfalama ve arama yapabilmek için daha fazla ürün çekelim
-        const res = await fetch("https://dummyjson.com/products?limit=100");
-        if (!res.ok) throw new Error("API'den ürünler çekilemedi");
-        const data = await res.json();
+        const { data, error: dbError } = await supabase
+          .from("products")
+          .select("*")
+          .order("created_at", { ascending: false }); // En yeni ürünler üstte
 
-        const mappedProducts = data.products.map((apiProduct: ApiProduct) => ({
-          id: String(apiProduct.id),
-          name: apiProduct.title,
-          category: apiProduct.category,
-          price: apiProduct.price,
-          stock: apiProduct.stock,
-          status: apiProduct.stock > 0 ? "Yayında" : "Stokta Yok",
-          imageUrl: apiProduct.thumbnail,
-        }));
-        setAllProducts(mappedProducts);
+        if (dbError) throw dbError;
+        setAllProducts(data || []);
       } catch (err) {
         setError(
-          err instanceof Error ? err.message : "Bilinmeyen bir hata oluştu"
+          err instanceof Error
+            ? err.message
+            : "Ürünler yüklenirken bir hata oluştu"
         );
       } finally {
         setIsLoading(false);
       }
     }
+    fetchInitialProducts();
+  }, []);
 
-    fetchProducts();
-  }, []); // Bu useEffect sadece bileşen ilk yüklendiğinde çalışır
+  // Supabase Realtime aboneliğini kurmak için
+  useEffect(() => {
+    const channel = supabase
+      .channel("realtime products")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "products" },
+        (payload) => {
+          console.log("Veritabanı değişikliği algılandı!", payload);
+          if (payload.eventType === "INSERT") {
+            setAllProducts((currentProducts) => [
+              payload.new as Product,
+              ...currentProducts,
+            ]);
+          }
+          if (payload.eventType === "UPDATE") {
+            setAllProducts((currentProducts) =>
+              currentProducts.map((p) =>
+                p.id === (payload.new as Product).id
+                  ? (payload.new as Product)
+                  : p
+              )
+            );
+          }
+          if (payload.eventType === "DELETE") {
+            setAllProducts((currentProducts) =>
+              currentProducts.filter((p) => p.id !== payload.old.id)
+            );
+          }
+        }
+      )
+      .subscribe();
 
-  // Arama terimine göre ürünleri filtrele
-  const filteredProducts = useMemo(() => {
-    return allProducts.filter(
-      (product) =>
-        product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        product.category.toLowerCase().includes(searchTerm.toLowerCase())
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, []);
+
+  // Kategori checkbox durumu değiştiğinde çalışacak fonksiyon
+  const handleCategoryChange = (category: string) => {
+    setSelectedCategories(
+      (prev) =>
+        prev.includes(category)
+          ? prev.filter((c) => c !== category) // Eğer zaten seçiliyse, listeden çıkar
+          : [...prev, category] // Eğer seçili değilse, listeye ekle
     );
-  }, [allProducts, searchTerm]);
+    setCurrentPage(1); // Filtre değiştiğinde ilk sayfaya dön
+  };
 
-  // Sayfalama için filtrelenmiş ürünleri böl
+  // Arama ve kategoriye göre filtreleme mantığı güncellendi
+  const filteredProducts = useMemo(() => {
+    return allProducts.filter((product) => {
+      // Eğer hiçbir kategori seçilmemişse, tümünü göster. Seçilmişse, ürünün kategorisi seçilenler arasında mı diye kontrol et.
+      const matchesCategory =
+        selectedCategories.length === 0 ||
+        selectedCategories.includes(product.category);
+      const matchesSearch =
+        product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        product.category.toLowerCase().includes(searchTerm.toLowerCase());
+      return matchesCategory && matchesSearch;
+    });
+  }, [allProducts, searchTerm, selectedCategories]);
+
   const paginatedProducts = useMemo(() => {
     const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
     return filteredProducts.slice(startIndex, startIndex + ITEMS_PER_PAGE);
@@ -92,23 +152,50 @@ export default function ProductsPage() {
     <div>
       <div className="flex flex-col sm:flex-row justify-between items-center gap-4 mb-6">
         <h2 className="text-3xl font-bold">Ürün Yönetimi</h2>
-        <div className="w-full sm:w-auto flex items-center gap-2">
-          {/* Arama Çubuğu */}
-          <div className="relative w-full sm:w-64">
+        <div className="w-full sm:w-auto flex flex-col sm:flex-row items-center gap-2">
+          <div className="relative w-full sm:w-auto">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
               type="search"
               placeholder="Ürün veya kategori ara..."
-              className="pl-9"
+              className="pl-9 w-full sm:w-64"
               value={searchTerm}
               onChange={(e) => {
                 setSearchTerm(e.target.value);
-                setCurrentPage(1); // Arama yapıldığında ilk sayfaya dön
+                setCurrentPage(1);
               }}
             />
           </div>
+          {/* Kategori Filtresi için DropdownMenu */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" className="w-full sm:w-auto">
+                <ListFilter className="h-4 w-4 mr-2" />
+                Kategoriler (
+                {selectedCategories.length === 0
+                  ? "Tümü"
+                  : selectedCategories.length}
+                )
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent className="w-56">
+              <DropdownMenuLabel>Kategoriye Göre Filtrele</DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              {allCategories.map((category) => (
+                <DropdownMenuCheckboxItem
+                  key={category}
+                  checked={selectedCategories.includes(category)}
+                  onCheckedChange={() => handleCategoryChange(category)}
+                >
+                  {category}
+                </DropdownMenuCheckboxItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
           <Link href="/dashboard/products/new">
-            <Button className="whitespace-nowrap">Yeni Ürün Ekle</Button>
+            <Button className="whitespace-nowrap w-full sm:w-auto">
+              Yeni Ürün Ekle
+            </Button>
           </Link>
         </div>
       </div>
@@ -122,7 +209,6 @@ export default function ProductsPage() {
           <>
             <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-gray-50">
-                {/* Tablo başlıkları (thead) aynı kalıyor */}
                 <tr>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
                     Görsel
@@ -139,9 +225,6 @@ export default function ProductsPage() {
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
                     Stok
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                    Durum
-                  </th>
                   <th className="relative px-6 py-3">
                     <span className="sr-only">Eylemler</span>
                   </th>
@@ -151,7 +234,10 @@ export default function ProductsPage() {
                 {paginatedProducts.map((product) => (
                   <tr key={product.id} className="hover:bg-gray-50">
                     <td className="px-4 py-3">
-                      <ProductImage src={product.imageUrl} alt={product.name} />
+                      <ProductImage
+                        src={product.image_url}
+                        alt={product.name}
+                      />
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap font-medium text-gray-900">
                       <Link
@@ -167,19 +253,8 @@ export default function ProductsPage() {
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                       ₺{product.price.toLocaleString("tr-TR")}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                    <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-gray-700">
                       {product.stock}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span
-                        className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
-                          product.status === "Yayında"
-                            ? "bg-green-100 text-green-800"
-                            : "bg-red-100 text-red-800"
-                        }`}
-                      >
-                        {product.status}
-                      </span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                       <Link
@@ -193,7 +268,6 @@ export default function ProductsPage() {
                 ))}
               </tbody>
             </table>
-            {/* Sayfalama Kontrolleri */}
             <div className="flex items-center justify-between mt-4">
               <span className="text-sm text-gray-700">
                 Sayfa {currentPage} / {totalPages}
@@ -226,7 +300,7 @@ export default function ProductsPage() {
           </>
         ) : (
           <p className="text-center p-8 text-gray-500">
-            Aranan kriterlere uygun ürün bulunamadı.
+            Bu kriterlere uygun ürün bulunamadı.
           </p>
         )}
       </div>

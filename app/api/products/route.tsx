@@ -4,6 +4,7 @@ import { supabase } from "@/lib/supabase";
 import { z } from "zod";
 
 // Zod ile form verisi için bir şema oluşturuyoruz
+// Bu şema, Supabase tablonuzla ve formunuzla eşleşmelidir.
 const productSchema = z.object({
   name: z.string().min(3, "Ürün adı en az 3 karakter olmalıdır."),
   description: z.string().optional(),
@@ -11,6 +12,7 @@ const productSchema = z.object({
   price: z.number().min(0, "Fiyat negatif olamaz."),
   stock: z.number().int().min(0, "Stok negatif olamaz."),
   barcode: z.string().min(1, "Barkod alanı zorunludur."),
+  image_url: z.string().url().nullable().optional(), // image_url alanı eklendi
 });
 
 export async function POST(request: Request) {
@@ -20,6 +22,7 @@ export async function POST(request: Request) {
     // Gelen veriyi Zod şeması ile doğrula
     const validation = productSchema.safeParse(body);
     if (!validation.success) {
+      console.error("Zod Validation Error:", validation.error.flatten());
       return NextResponse.json(
         { error: "Geçersiz form verisi", details: validation.error.flatten() },
         { status: 400 }
@@ -28,18 +31,8 @@ export async function POST(request: Request) {
 
     // Doğrulanmış veriyi Supabase'e ekle
     const { data, error } = await supabase
-      .from("products") // Supabase'deki tablonuzun adının 'products' olduğunu varsayıyoruz
-      .insert([
-        {
-          name: validation.data.name,
-          description: validation.data.description,
-          category: validation.data.category,
-          price: validation.data.price,
-          stock: validation.data.stock,
-          barcode: validation.data.barcode,
-          // image_url gibi diğer alanları da buraya ekleyebilirsiniz
-        },
-      ])
+      .from("products")
+      .insert([validation.data]) // Zod tarafından doğrulanan veriyi direkt ekle
       .select()
       .single();
 
