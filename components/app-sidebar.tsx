@@ -4,7 +4,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
-import { useSidebar } from "@/components/ui/sidebar"; // Durumu almak için hook
+import { useSidebar } from "@/components/ui/sidebar"; // Doğru hook'u import ediyoruz
 import {
   Tooltip,
   TooltipContent,
@@ -47,9 +47,8 @@ const secondaryNavLinks = [
 
 export function AppSidebar() {
   const pathname = usePathname();
-  // DEĞİŞİKLİK: 'isCollapsed' yerine 'state' alıyoruz
+  // DÜZELTME: 'isCollapsed' yerine 'state' alıyoruz
   const { state } = useSidebar();
-  // 'isCollapsed' boolean değerini kendimiz türetiyoruz
   const isCollapsed = state === "collapsed";
 
   const renderLink = (link: any, isTooltip: boolean) => {
@@ -88,15 +87,14 @@ export function AppSidebar() {
       <aside
         className={cn(
           "flex-col bg-gray-900 text-gray-300 p-4 space-y-2 hidden md:flex transition-all duration-300 ease-in-out",
-          isCollapsed ? "w-20" : "w-64" // Genişliği duruma göre ayarla
+          isCollapsed ? "w-20" : "w-64"
         )}
       >
         <div className="px-2 py-2 text-white text-xl font-bold flex items-center gap-2">
           <div className="w-6 h-6 rounded-full bg-white flex-shrink-0"></div>
-          <span className={cn(isCollapsed && "sr-only")}>Market Statics</span>
+          <span className={cn(isCollapsed && "sr-only")}>Acme Inc.</span>
         </div>
 
-        {/* ... (Diğer sidebar elemanları) ... */}
         <nav className="flex-1 mt-2 space-y-1">
           {mainNavLinks.map((link) => (
             <div key={link.href}>{renderLink(link, isCollapsed)}</div>

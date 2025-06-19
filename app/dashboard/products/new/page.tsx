@@ -17,7 +17,7 @@ import { Camera, X, Upload } from "lucide-react";
 import { useState, useEffect } from "react";
 import { BarcodeScanner } from "@/components/ui/barcode-scanner";
 
-// Zod ile form şeması (API ile aynı olmalı)
+// Form şeması
 const productFormSchema = z.object({
   name: z.string().min(3, { message: "Ürün adı en az 3 karakter olmalıdır." }),
   description: z.string().optional(),
@@ -33,6 +33,7 @@ const productFormSchema = z.object({
 
 type ProductFormData = z.infer<typeof productFormSchema>;
 
+// Formun kendisini içeren bileşen
 function NewProductForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -40,6 +41,7 @@ function NewProductForm() {
 
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [showScanner, setShowScanner] = useState(false); // Barkod tarayıcı modalı için state
 
   const {
     register,
@@ -68,6 +70,12 @@ function NewProductForm() {
     }
   };
 
+  // YENİDEN EKLENDİ: Barkod başarıyla okunduğunda çalışacak fonksiyon
+  const handleScanComplete = (scannedBarcode: string) => {
+    setValue("barcode", scannedBarcode, { shouldValidate: true });
+    setShowScanner(false); // Tarayıcıyı kapat
+  };
+
   const onSubmit = async (data: ProductFormData) => {
     const promise = new Promise(async (resolve, reject) => {
       try {
@@ -76,7 +84,7 @@ function NewProductForm() {
         if (imageFile) {
           const filePath = `public/${Date.now()}_${imageFile.name}`;
           const { error: uploadError } = await supabase.storage
-            .from("product_images")
+            .from("product-images")
             .upload(filePath, imageFile);
 
           if (uploadError) {
@@ -84,7 +92,7 @@ function NewProductForm() {
           }
 
           const { data: urlData } = supabase.storage
-            .from("product_images")
+            .from("product-images")
             .getPublicUrl(filePath);
           imageUrl = urlData.publicUrl;
         }
@@ -160,7 +168,37 @@ function NewProductForm() {
           </div>
         </div>
 
-        {/* Diğer Form Alanları */}
+        {/* Barkod Alanı */}
+        <div>
+          <label
+            htmlFor="barcode"
+            className="block text-sm font-medium text-gray-700 mb-1"
+          >
+            Barkod
+          </label>
+          {/* YENİDEN EKLENDİ: Tara butonu */}
+          <div className="flex gap-2">
+            <Input
+              id="barcode"
+              {...register("barcode")}
+              placeholder="Ürün barkodunu girin veya taratın"
+            />
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setShowScanner(true)}
+            >
+              <Camera className="h-4 w-4 mr-2" /> Tara
+            </Button>
+          </div>
+          {errors.barcode && (
+            <p className="text-sm text-red-500 mt-1">
+              {errors.barcode.message}
+            </p>
+          )}
+        </div>
+
+        {/* Diğer form alanları... */}
         <div>
           <label
             htmlFor="name"
@@ -171,21 +209,6 @@ function NewProductForm() {
           <Input id="name" {...register("name")} />
           {errors.name && (
             <p className="text-sm text-red-500 mt-1">{errors.name.message}</p>
-          )}
-        </div>
-
-        <div>
-          <label
-            htmlFor="barcode"
-            className="block text-sm font-medium text-gray-700 mb-1"
-          >
-            Barkod
-          </label>
-          <Input id="barcode" {...register("barcode")} />
-          {errors.barcode && (
-            <p className="text-sm text-red-500 mt-1">
-              {errors.barcode.message}
-            </p>
           )}
         </div>
 
@@ -257,6 +280,25 @@ function NewProductForm() {
           </Button>
         </div>
       </form>
+
+      {/* YENİDEN EKLENDİ: Barkod okuyucu modalı */}
+      {showScanner && (
+        <div className="fixed inset-0 z-50 bg-black bg-opacity-75 flex items-center justify-center p-4">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-lg p-4 relative">
+            <h3 className="text-lg font-medium mb-4">Barkodu Okutun</h3>
+            <button
+              onClick={() => setShowScanner(false)}
+              className="absolute top-2 right-2 p-1 rounded-full bg-gray-100 hover:bg-gray-200"
+            >
+              <X size={20} />
+            </button>
+            <BarcodeScanner
+              onScanSuccess={handleScanComplete}
+              onScanError={(error) => console.error(error)}
+            />
+          </div>
+        </div>
+      )}
     </>
   );
 }
