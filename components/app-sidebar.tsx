@@ -4,7 +4,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
-import { useSidebar } from "@/components/ui/sidebar"; // Doğru hook'u import ediyoruz
+import { useSidebar } from "@/components/ui/sidebar"; // Durumu almak için hook
 import {
   Tooltip,
   TooltipContent,
@@ -47,7 +47,6 @@ const secondaryNavLinks = [
 
 export function AppSidebar() {
   const pathname = usePathname();
-  // DÜZELTME: 'isCollapsed' yerine 'state' alıyoruz
   const { state } = useSidebar();
   const isCollapsed = state === "collapsed";
 

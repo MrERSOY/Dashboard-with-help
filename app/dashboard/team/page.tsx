@@ -1,115 +1,201 @@
 // app/dashboard/team/page.tsx
-import type { Metadata } from "next";
-import { Users2, MailPlus } from "lucide-react";
+"use client"; // State yönetimi (arama, sayfalama) için Client Component
+
+import { useState, useEffect, useMemo } from "react";
+import { supabase } from "@/lib/supabase";
 import Image from "next/image";
+import { MailPlus, Search, ChevronLeft, ChevronRight } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 
-export const metadata: Metadata = {
-  title: "Kullanıcılar | Dashboard",
-};
-
-// Örnek Kullanıcı Verisi
-const teamMembers = [
-  {
-    id: "u01",
-    name: "Ali Veli",
-    email: "ali.veli@acme.com",
-    role: "Yönetici",
-    avatar: "/images/avatars/avatar-1.png",
-    status: "Aktif",
-  },
-  {
-    id: "u02",
-    name: "Ayşe Fatma",
-    email: "ayse.f@acme.com",
-    role: "Editör",
-    avatar: "/images/avatars/avatar-2.png",
-    status: "Aktif",
-  },
-  {
-    id: "u03",
-    name: "Hasan Hüseyin",
-    email: "hasan.h@acme.com",
-    role: "Geliştirici",
-    avatar: "/images/avatars/avatar-3.png",
-    status: "Aktif",
-  },
-  {
-    id: "u04",
-    name: "Zeynep Sude",
-    email: "zeynep.sude@acme.com",
-    role: "İzleyici",
-    avatar: "/images/avatars/avatar-4.png",
-    status: "Pasif",
-  },
-  {
-    id: "u05",
-    name: "Mehmet Can",
-    email: "mehmet.can@acme.com",
-    role: "Editör",
-    avatar: "/images/avatars/avatar-5.png",
-    status: "Beklemede",
-  },
-];
+// Veritabanından gelen kullanıcı tipi
+interface User {
+  id: string;
+  name: string | null;
+  email: string | null;
+  role: string | null; // Veritabanından gelecek
+  status: string | null; // Veritabanından gelecek
+  avatar: string; // Şimdilik sahte kalacak
+}
 
 export default function TeamPage() {
+  const [allUsers, setAllUsers] = useState<User[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const [searchTerm, setSearchTerm] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
+  const ITEMS_PER_PAGE = 8;
+
+  // Supabase'den kullanıcıları çekmek için useEffect
+  useEffect(() => {
+    async function fetchUsers() {
+      setIsLoading(true);
+      setError(null);
+      try {
+        // GÜNCELLEME: select sorgusuna 'role' ve 'status' eklendi
+        const { data, error: dbError } = await supabase
+          .from("users")
+          .select("id, name, email, role, status") // 'role' ve 'status' sütunlarını çek
+          .order("created_at", { ascending: false });
+
+        if (dbError) throw dbError;
+
+        // GÜNCELLEME: Sahte rol/durum ataması kaldırıldı. Avatar sahte kalıyor.
+        const mappedUsers = (data || []).map((user, index) => ({
+          ...user,
+          avatar: `/images/avatars/avatar-${(index % 5) + 1}.png`, // Örnek avatar yolları
+        }));
+
+        setAllUsers(mappedUsers);
+      } catch (err) {
+        setError(
+          err instanceof Error
+            ? err.message
+            : "Kullanıcılar yüklenirken bir hata oluştu."
+        );
+      } finally {
+        setIsLoading(false);
+      }
+    }
+    fetchUsers();
+  }, []);
+
+  // Arama ve sayfalama mantığı (değişiklik yok)
+  const filteredUsers = useMemo(() => {
+    if (!searchTerm) return allUsers;
+    return allUsers.filter(
+      (user) =>
+        user.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        user.email?.toLowerCase().includes(searchTerm.toLowerCase())
+    );
+  }, [allUsers, searchTerm]);
+
+  const paginatedUsers = useMemo(() => {
+    const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
+    return filteredUsers.slice(startIndex, startIndex + ITEMS_PER_PAGE);
+  }, [filteredUsers, currentPage]);
+
+  const totalPages = Math.ceil(filteredUsers.length / ITEMS_PER_PAGE);
+
   return (
     <div>
-      <div className="flex justify-between items-center mb-6">
-        <div className="flex items-center gap-4">
-          <Users2 className="w-8 h-8 text-gray-700" />
-          <h1 className="text-3xl font-bold">Kullanıcılar</h1>
+      <div className="flex flex-col sm:flex-row justify-between items-center gap-4 mb-6">
+        <h1 className="text-3xl font-bold">Kullanıcı Yönetimi</h1>
+        <div className="w-full sm:w-auto flex flex-col sm:flex-row items-center gap-2">
+          <div className="relative w-full sm:w-auto">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              type="search"
+              placeholder="İsim veya e-posta ara..."
+              className="pl-9 w-full sm:w-64"
+              value={searchTerm}
+              onChange={(e) => {
+                setSearchTerm(e.target.value);
+                setCurrentPage(1);
+              }}
+            />
+          </div>
+          <Button className="whitespace-nowrap w-full sm:w-auto">
+            <MailPlus size={18} className="mr-2" />
+            Yeni Kullanıcı Davet Et
+          </Button>
         </div>
-        <button className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700">
-          <MailPlus size={18} />
-          Yeni Kullanıcı Davet Et
-        </button>
       </div>
-      <p className="text-gray-600 mb-8">
+      <p className="text-muted-foreground mb-8">
         Ekip üyelerini görüntüleyin, rollerini ve izinlerini yönetin.
       </p>
 
-      <div className="bg-white rounded-lg shadow overflow-hidden">
-        <ul className="divide-y divide-gray-200">
-          {teamMembers.map((member) => (
-            <li
-              key={member.id}
-              className="p-4 flex items-center justify-between hover:bg-gray-50"
-            >
-              <div className="flex items-center gap-4">
-                <Image
-                  src={member.avatar}
-                  alt={member.name}
-                  width={40}
-                  height={40}
-                  className="rounded-full"
-                />
-                <div>
-                  <p className="text-sm font-semibold text-gray-900">
-                    {member.name}
-                  </p>
-                  <p className="text-sm text-gray-500">{member.email}</p>
-                </div>
-              </div>
-              <div className="flex items-center gap-4">
-                <p className="text-sm text-gray-600">{member.role}</p>
-                <span
-                  className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
-                    member.status === "Aktif"
-                      ? "bg-green-100 text-green-800"
-                      : member.status === "Beklemede"
-                      ? "bg-yellow-100 text-yellow-800"
-                      : "bg-gray-100 text-gray-800"
-                  }`}
+      <div className="bg-card rounded-lg shadow-md border overflow-hidden">
+        {isLoading ? (
+          <p className="text-center p-8 text-muted-foreground">
+            Kullanıcılar yükleniyor...
+          </p>
+        ) : error ? (
+          <p className="text-center p-8 text-destructive">{error}</p>
+        ) : paginatedUsers.length > 0 ? (
+          <>
+            <ul className="divide-y divide-border">
+              {paginatedUsers.map((member) => (
+                <li
+                  key={member.id}
+                  className="p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 hover:bg-muted/50"
                 >
-                  {member.status}
+                  <div className="flex items-center gap-4">
+                    <Image
+                      src={member.avatar}
+                      alt={member.name || "Avatar"}
+                      width={40}
+                      height={40}
+                      className="rounded-full"
+                      onError={(e) => {
+                        (e.target as HTMLImageElement).src =
+                          "/images/avatars/default.png";
+                      }}
+                    />
+                    <div>
+                      <p className="text-sm font-semibold text-foreground">
+                        {member.name}
+                      </p>
+                      <p className="text-sm text-muted-foreground">
+                        {member.email}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-4 w-full sm:w-auto justify-end">
+                    <p className="text-sm text-muted-foreground w-20 text-center">
+                      {member.role}
+                    </p>
+                    <span
+                      className={`px-2 py-0.5 inline-flex text-xs leading-5 font-semibold rounded-full ${
+                        member.status === "Aktif"
+                          ? "bg-green-100 text-green-800"
+                          : "bg-gray-100 text-gray-800"
+                      }`}
+                    >
+                      {member.status}
+                    </span>
+                    <Button variant="ghost" size="sm">
+                      Düzenle
+                    </Button>
+                  </div>
+                </li>
+              ))}
+            </ul>
+            {/* Sayfalama Kontrolleri */}
+            <div className="flex items-center justify-center p-4 border-t">
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() =>
+                    setCurrentPage((prev) => Math.max(prev - 1, 1))
+                  }
+                  disabled={currentPage === 1}
+                >
+                  <ChevronLeft className="h-4 w-4" />{" "}
+                </Button>
+                <span className="text-sm text-muted-foreground">
+                  Sayfa {currentPage} / {totalPages}
                 </span>
-                <button className="text-gray-400 hover:text-gray-600">
-                  ...
-                </button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() =>
+                    setCurrentPage((prev) => Math.min(prev + 1, totalPages))
+                  }
+                  disabled={currentPage === totalPages}
+                >
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
               </div>
-            </li>
-          ))}
-        </ul>
+            </div>
+          </>
+        ) : (
+          <p className="text-center p-8 text-muted-foreground">
+            Bu kriterlere uygun kullanıcı bulunamadı.
+          </p>
+        )}
       </div>
     </div>
   );

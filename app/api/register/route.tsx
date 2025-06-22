@@ -1,7 +1,8 @@
 // app/api/register/route.ts
 import { NextResponse } from "next/server";
-import { supabase } from "@/lib/supabase";
+import clientPromise from "@/lib/mongodb";
 import bcrypt from "bcryptjs";
+import { MongoClient } from "mongodb";
 
 export async function POST(request: Request) {
   try {
@@ -14,12 +15,10 @@ export async function POST(request: Request) {
       );
     }
 
-    const { data: existingUser } = await supabase
-      .from("users")
-      .select("email")
-      .eq("email", email)
-      .single();
+    const client: MongoClient = await clientPromise;
+    const db = client.db("Dashboard"); // Veritabanı adını manuel olarak belirtelim
 
+    const existingUser = await db.collection("users").findOne({ email });
     if (existingUser) {
       return NextResponse.json(
         { error: "Bu e-posta adresi zaten kullanılıyor." },
@@ -29,22 +28,25 @@ export async function POST(request: Request) {
 
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    const { data, error } = await supabase
-      .from("users")
-      .insert([{ name, email, password: hashedPassword }])
-      .select()
-      .single();
+    const result = await db.collection("users").insertOne({
+      name,
+      email,
+      password: hashedPassword,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      emailVerified: null,
+      role: "İzleyici", // Varsayılan rol
+      status: "Aktif", // Varsayılan durum
+    });
 
-    if (error) {
-      // Orijinal Supabase hatasını konsola yazdır
-      console.error("Supabase insert error:", error);
-      throw new Error("Kullanıcı oluşturulurken bir veritabanı hatası oluştu.");
-    }
-
-    const { password: _, ...userWithoutPassword } = data;
-    return NextResponse.json(userWithoutPassword, { status: 201 });
+    return NextResponse.json(
+      {
+        message: "Kullanıcı başarıyla oluşturuldu.",
+        userId: result.insertedId,
+      },
+      { status: 201 }
+    );
   } catch (error) {
-    // Yakalanan hatayı konsola yazdır
     console.error("Register API error:", error);
     return NextResponse.json({ error: "İç sunucu hatası." }, { status: 500 });
   }

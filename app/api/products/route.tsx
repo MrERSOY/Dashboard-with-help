@@ -1,52 +1,70 @@
 // app/api/products/route.ts
 import { NextResponse } from "next/server";
-import { supabase } from "@/lib/supabase";
+import clientPromise from "@/lib/mongodb";
+import { MongoClient } from "mongodb";
 import { z } from "zod";
 
-// Zod ile form verisi için bir şema oluşturuyoruz
-// Bu şema, Supabase tablonuzla ve formunuzla eşleşmelidir.
+// POST isteği için Zod şeması
 const productSchema = z.object({
   name: z.string().min(3, "Ürün adı en az 3 karakter olmalıdır."),
   description: z.string().optional(),
   category: z.string(),
-  price: z.number().min(0, "Fiyat negatif olamaz."),
-  stock: z.number().int().min(0, "Stok negatif olamaz."),
-  barcode: z.string().min(1, "Barkod alanı zorunludur."),
-  image_url: z.string().url().nullable().optional(), // image_url alanı eklendi
+  price: z.number().min(0),
+  stock: z.number().int().min(0),
+  barcode: z.string().min(1),
+  image_url: z.string().url().nullable().optional(),
 });
 
+// Ürünleri listeleyen GET fonksiyonu
+export async function GET(request: Request) {
+  try {
+    const client: MongoClient = await clientPromise;
+    const db = client.db("Dashboard");
+
+    const products = await db
+      .collection("products")
+      .find({})
+      .sort({ createdAt: -1 })
+      .toArray();
+
+    return NextResponse.json(products);
+  } catch (error) {
+    console.error("Get Products API error:", error);
+    return NextResponse.json(
+      { error: "Ürünler getirilirken bir hata oluştu." },
+      { status: 500 }
+    );
+  }
+}
+
+// Yeni ürün ekleyen POST fonksiyonu
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-
-    // Gelen veriyi Zod şeması ile doğrula
     const validation = productSchema.safeParse(body);
+
     if (!validation.success) {
-      console.error("Zod Validation Error:", validation.error.flatten());
       return NextResponse.json(
         { error: "Geçersiz form verisi", details: validation.error.flatten() },
         { status: 400 }
       );
     }
 
-    // Doğrulanmış veriyi Supabase'e ekle
-    const { data, error } = await supabase
-      .from("products")
-      .insert([validation.data]) // Zod tarafından doğrulanan veriyi direkt ekle
-      .select()
-      .single();
+    const client: MongoClient = await clientPromise;
+    const db = client.db("Dashboard");
 
-    if (error) {
-      console.error("Supabase insert error:", error);
-      return NextResponse.json(
-        { error: "Veritabanına kayıt sırasında bir hata oluştu." },
-        { status: 500 }
-      );
-    }
+    const result = await db.collection("products").insertOne({
+      ...validation.data,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
 
-    return NextResponse.json(data, { status: 201 });
+    return NextResponse.json(
+      { message: "Ürün başarıyla oluşturuldu.", productId: result.insertedId },
+      { status: 201 }
+    );
   } catch (error) {
-    console.error("Create product API error:", error);
+    console.error("Create Product API error:", error);
     return NextResponse.json({ error: "İç sunucu hatası." }, { status: 500 });
   }
 }

@@ -1,18 +1,14 @@
 // app/api/auth/[...nextauth]/route.ts
-import NextAuth from "next-auth";
+import NextAuth, { NextAuthOptions } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
-import { supabase } from "@/lib/supabase"; // Supabase istemcimiz
-import bcrypt from "bcryptjs"; // Şifre karşılaştırma için
+import { MongoDBAdapter } from "@next-auth/mongodb-adapter";
+import clientPromise from "@/lib/mongodb";
+import { MongoClient } from "mongodb";
+import bcrypt from "bcryptjs";
 
-// Kullanıcı tipi (veritabanından dönecek)
-interface DbUser {
-  id: string;
-  name: string;
-  email: string;
-  password?: string; // Bu alanı seçmemeye dikkat edeceğiz
-}
+export const authOptions: NextAuthOptions = {
+  adapter: MongoDBAdapter(clientPromise),
 
-const handler = NextAuth({
   providers: [
     CredentialsProvider({
       name: "Credentials",
@@ -20,71 +16,70 @@ const handler = NextAuth({
         email: { label: "Email", type: "email" },
         password: { label: "Password", type: "password" },
       },
-      async authorize(credentials, req) {
+      async authorize(credentials) {
         if (!credentials?.email || !credentials?.password) {
-          return null;
+          throw new Error("Eksik bilgi girdiniz.");
         }
 
-        // 1. Kullanıcıyı e-posta adresine göre veritabanında bul
-        const { data: user, error } = await supabase
-          .from("users")
-          .select("*") // Şifreyi de almamız gerekiyor karşılaştırma için
-          .eq("email", credentials.email)
-          .single();
+        const client: MongoClient = await clientPromise;
+        // DÜZELTME: Veritabanı adını açıkça belirtiyoruz
+        const db = client.db("Dashboard");
 
-        if (error || !user) {
-          console.error("Kullanıcı bulunamadı veya Supabase hatası:", error);
-          return null;
+        // Kullanıcıyı e-posta adresine göre MongoDB'den bul
+        const user = await db
+          .collection("users")
+          .findOne({ email: credentials.email });
+
+        if (!user) {
+          throw new Error("Kullanıcı bulunamadı.");
         }
 
-        // 2. Girilen şifre ile veritabanındaki hash'lenmiş şifreyi karşılaştır
-        const passwordMatch = await bcrypt.compare(
+        // Girilen şifre ile veritabanındaki hash'lenmiş şifreyi karşılaştır
+        const isPasswordCorrect = await bcrypt.compare(
           credentials.password,
           user.password
         );
 
-        if (!passwordMatch) {
-          console.log("Şifre eşleşmedi.");
-          return null;
+        if (!isPasswordCorrect) {
+          throw new Error("Hatalı şifre.");
         }
 
-        console.log("Giriş başarılı:", user.email);
-
-        // 3. Başarılı olursa, session için kullanıcı objesini döndür
-        // Dönen objeye asla şifreyi dahil etme!
+        // Başarılı olursa, session için kullanıcı objesini döndür
         return {
-          id: user.id,
+          id: user._id.toString(),
           name: user.name,
           email: user.email,
         };
       },
     }),
   ],
-  pages: {
-    signIn: "/login",
-  },
-  // Session yönetimi için strateji
+
   session: {
     strategy: "jwt",
   },
-  // JWT ve session'a ek bilgi eklemek için callbacks
+
   callbacks: {
     async jwt({ token, user }) {
-      // Giriş yapıldığında, user objesindeki bilgileri token'a ekle
       if (user) {
         token.id = user.id;
       }
       return token;
     },
     async session({ session, token }) {
-      // Token'daki bilgileri session objesine ekle
       if (session.user) {
-        // NextAuth'un varsayılan User tipinde id yok, bu yüzden cast ediyoruz
         (session.user as any).id = token.id;
       }
       return session;
     },
   },
-});
+
+  pages: {
+    signIn: "/login",
+  },
+
+  secret: process.env.NEXTAUTH_SECRET,
+};
+
+const handler = NextAuth(authOptions);
 
 export { handler as GET, handler as POST };

@@ -1,17 +1,13 @@
-// app/dashboard/layout.tsx
-"use client"; // YENİ: Provider'ın context'ini doğru aktarması için Client Component yapıyoruz.
+// components/dashboard-shell.tsx
+"use client"; // Bu bileşen, state ve context'i yönettiği için bir Client Component.
 
 import { AppSidebar } from "@/components/app-sidebar";
 import { SiteHeader } from "@/components/site-header";
-import { SidebarProvider } from "@/components/ui/sidebar"; // Doğru provider'ı import ediyoruz
+import { SidebarProvider } from "@/components/ui/sidebar";
 
-export default function DashboardLayout({
-  children,
-}: Readonly<{
-  children: React.ReactNode;
-}>) {
+export function DashboardShell({ children }: { children: React.ReactNode }) {
   return (
-    // Provider, tüm layout'u sarmalamalıdır.
+    // Provider, tüm layout'u sarmalayarak context'i sağlar.
     <SidebarProvider>
       <div className="flex min-h-screen w-full bg-background">
         <AppSidebar />
