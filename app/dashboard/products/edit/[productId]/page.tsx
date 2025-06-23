@@ -82,7 +82,7 @@ function EditProductForm() {
 
   const form = useForm<ProductFormData>({
     resolver: zodResolver(productFormSchema),
-    defaultValues: {},
+    defaultValues: {}, // Başlangıçta boş, useEffect ile doldurulacak
   });
 
   // Ürün verisini çekmek ve formu doldurmak için
@@ -92,7 +92,6 @@ function EditProductForm() {
       try {
         const response = await fetch(`/api/products/${productId}`);
         if (!response.ok) {
-          // Hata durumunda spesifik bir mesaj fırlat
           const errorData = await response.json();
           throw new Error(errorData.error || "Ürün bilgileri yüklenemedi.");
         }
@@ -103,8 +102,6 @@ function EditProductForm() {
         }
       } catch (error: any) {
         toast.error(error.message);
-        // DÜZELTME: Hata durumunda artık otomatik yönlendirme yapmıyoruz.
-        // router.push('/dashboard/products');
       } finally {
         setIsLoading(false);
       }
@@ -112,7 +109,6 @@ function EditProductForm() {
     if (productId) fetchProduct();
   }, [productId, form, router]);
 
-  // Cloudinary'ye resim yüklendiğinde çalışır
   const handleUploadSuccess = (result: any) => {
     const secureUrl = result?.info?.secure_url;
     if (secureUrl) {
@@ -177,7 +173,7 @@ function EditProductForm() {
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
         <FormField
-          name="image" // Form şemasında olmasa da FormItem için bir isim gerekli
+          name="image"
           render={() => (
             <FormItem>
               <FormLabel>Ürün Görseli</FormLabel>
@@ -223,7 +219,6 @@ function EditProductForm() {
           )}
         />
 
-        {/* DÜZELTME: Eksik olan form alanları geri eklendi */}
         <FormField
           control={form.control}
           name="barcode"

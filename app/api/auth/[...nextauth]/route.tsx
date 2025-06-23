@@ -8,7 +8,6 @@ import bcrypt from "bcryptjs";
 
 export const authOptions: NextAuthOptions = {
   adapter: MongoDBAdapter(clientPromise),
-
   providers: [
     CredentialsProvider({
       name: "Credentials",
@@ -17,47 +16,28 @@ export const authOptions: NextAuthOptions = {
         password: { label: "Password", type: "password" },
       },
       async authorize(credentials) {
-        if (!credentials?.email || !credentials?.password) {
+        if (!credentials?.email || !credentials?.password)
           throw new Error("Eksik bilgi girdiniz.");
-        }
 
         const client: MongoClient = await clientPromise;
-        // DÜZELTME: Veritabanı adını açıkça belirtiyoruz
         const db = client.db("Dashboard");
-
-        // Kullanıcıyı e-posta adresine göre MongoDB'den bul
         const user = await db
           .collection("users")
           .findOne({ email: credentials.email });
 
-        if (!user) {
-          throw new Error("Kullanıcı bulunamadı.");
-        }
+        if (!user) throw new Error("Kullanıcı bulunamadı.");
 
-        // Girilen şifre ile veritabanındaki hash'lenmiş şifreyi karşılaştır
         const isPasswordCorrect = await bcrypt.compare(
           credentials.password,
           user.password
         );
+        if (!isPasswordCorrect) throw new Error("Hatalı şifre.");
 
-        if (!isPasswordCorrect) {
-          throw new Error("Hatalı şifre.");
-        }
-
-        // Başarılı olursa, session için kullanıcı objesini döndür
-        return {
-          id: user._id.toString(),
-          name: user.name,
-          email: user.email,
-        };
+        return { id: user._id.toString(), name: user.name, email: user.email };
       },
     }),
   ],
-
-  session: {
-    strategy: "jwt",
-  },
-
+  session: { strategy: "jwt" },
   callbacks: {
     async jwt({ token, user }) {
       if (user) {
@@ -72,14 +52,9 @@ export const authOptions: NextAuthOptions = {
       return session;
     },
   },
-
-  pages: {
-    signIn: "/login",
-  },
-
+  pages: { signIn: "/login" },
   secret: process.env.NEXTAUTH_SECRET,
 };
 
 const handler = NextAuth(authOptions);
-
 export { handler as GET, handler as POST };
