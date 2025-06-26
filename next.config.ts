@@ -1,29 +1,23 @@
-// next.config.mjs
-
+// next.config.ts
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   images: {
     remotePatterns: [
-      // Cloudinary'den resimlere izin ver
       {
         protocol: "https",
-        hostname: "res.cloudinary.com",
+        hostname: "i.ibb.co", // imgbb.com için
         port: "",
-        pathname: `/${process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME}/image/upload/**`,
+        pathname: "/**", // Bu domaindeki tüm yollara izin ver
       },
-      // Yer tutucu (placeholder) resimlere izin ver
       {
         protocol: "https",
-        hostname: "placehold.co",
+        hostname: "placehold.co", // Placeholder resimler için
         port: "",
         pathname: "/**",
       },
+      // Gelecekte başka servisler eklerseniz buraya ekleyebilirsiniz.
     ],
-    // GÜNCELLEME: SVG resimlere izin ver
-    dangerouslyAllowSVG: true,
-    contentDispositionType: "attachment",
-    contentSecurityPolicy: "default-src 'self'; script-src 'none'; sandbox;",
   },
 };
 
-export default nextConfig;
+module.exports = nextConfig;

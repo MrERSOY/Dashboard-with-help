@@ -3,13 +3,12 @@
 
 import { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
-import Image from "next/image";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Search, ChevronLeft, ChevronRight } from "lucide-react";
+import ProductImage from "@/components/ProductImage"; // Doğru bileşeni import ettiğimizden emin olalım
 import { ObjectId } from "mongodb";
 
-// Veritabanından gelen ürün tipi
 interface Product {
   _id: ObjectId;
   name: string;
@@ -126,13 +125,8 @@ export default function ProductsPage() {
               paginatedProducts.map((product) => (
                 <tr key={product._id.toString()} className="hover:bg-muted/50">
                   <td className="p-4">
-                    <Image
-                      src={product.image_url || "https://placehold.co/40x40"}
-                      alt={product.name}
-                      width={40}
-                      height={40}
-                      className="rounded"
-                    />
+                    {/* ProductImage bileşenini kullanıyoruz */}
+                    <ProductImage src={product.image_url} alt={product.name} />
                   </td>
                   <td className="px-6 py-4 font-medium">
                     <Link

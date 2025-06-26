@@ -12,7 +12,7 @@ import { Toaster, toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Upload, Trash2 } from "lucide-react";
+import { Trash2 } from "lucide-react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -40,7 +40,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { CldUploadButton } from "next-cloudinary";
+import Image from "next/image";
 
 // Kapsamlı kategori listesi
 const allCategories = [
@@ -57,7 +57,7 @@ const allCategories = [
   "Yapı Market",
 ];
 
-// Form şeması
+// Form şeması güncellendi: image_url eklendi
 const productFormSchema = z.object({
   name: z.string().min(3, { message: "Ürün adı en az 3 karakter olmalıdır." }),
   description: z.string().optional(),
@@ -65,6 +65,11 @@ const productFormSchema = z.object({
   price: z.coerce.number().min(0),
   stock: z.coerce.number().int(),
   barcode: z.string().min(1, { message: "Barkod alanı zorunludur." }),
+  image_url: z
+    .string()
+    .url({ message: "Lütfen geçerli bir URL girin." })
+    .optional()
+    .or(z.literal("")),
 });
 
 type ProductFormData = z.infer<typeof productFormSchema>;
@@ -78,11 +83,9 @@ function EditProductForm() {
   const [isLoading, setIsLoading] = useState(true);
   const [isDeleting, setIsDeleting] = useState(false);
   const [isPending, startTransition] = useTransition();
-  const [imagePreview, setImagePreview] = useState<string | null>(null);
 
   const form = useForm<ProductFormData>({
     resolver: zodResolver(productFormSchema),
-    defaultValues: {}, // Başlangıçta boş, useEffect ile doldurulacak
   });
 
   // Ürün verisini çekmek ve formu doldurmak için
@@ -96,10 +99,7 @@ function EditProductForm() {
           throw new Error(errorData.error || "Ürün bilgileri yüklenemedi.");
         }
         const productData = await response.json();
-        form.reset(productData); // react-hook-form'un reset metodu ile formu doldur
-        if (productData.image_url) {
-          setImagePreview(productData.image_url);
-        }
+        form.reset(productData);
       } catch (error: any) {
         toast.error(error.message);
       } finally {
@@ -109,22 +109,12 @@ function EditProductForm() {
     if (productId) fetchProduct();
   }, [productId, form, router]);
 
-  const handleUploadSuccess = (result: any) => {
-    const secureUrl = result?.info?.secure_url;
-    if (secureUrl) {
-      setImagePreview(secureUrl);
-      toast.success("Resim başarıyla yüklendi!");
-    } else {
-      toast.error("Resim yüklenirken bir hata oluştu.");
-    }
-  };
-
   // Form gönderildiğinde çalışacak fonksiyon
   async function onSubmit(data: ProductFormData) {
     const promise = fetch(`/api/products/${productId}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ...data, image_url: imagePreview }),
+      body: JSON.stringify(data), // Resim URL'i artık form verisinin bir parçası
     }).then(async (response) => {
       if (!response.ok) {
         const errorData = await response.json();
@@ -173,39 +163,6 @@ function EditProductForm() {
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
         <FormField
-          name="image"
-          render={() => (
-            <FormItem>
-              <FormLabel>Ürün Görseli</FormLabel>
-              <div className="mt-2 flex items-center gap-4">
-                {imagePreview ? (
-                  <img
-                    src={imagePreview}
-                    alt="Önizleme"
-                    className="w-24 h-24 rounded-lg object-cover border"
-                  />
-                ) : (
-                  <div className="w-24 h-24 rounded-lg bg-muted flex items-center justify-center text-muted-foreground">
-                    Görsel Yok
-                  </div>
-                )}
-                <CldUploadButton
-                  options={{ maxFiles: 1 }}
-                  onSuccess={handleUploadSuccess}
-                  uploadPreset="ml_default"
-                  className="inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-primary text-primary-foreground hover:bg-primary/90 h-10 px-4 py-2"
-                >
-                  <Upload className="mr-2 h-4 w-4" /> Görsel Yükle/Değiştir
-                </CldUploadButton>
-              </div>
-              <FormDescription>
-                Yeni bir görsel yüklediğinizde, kaydetmeden önce burada görünür.
-              </FormDescription>
-            </FormItem>
-          )}
-        />
-
-        <FormField
           control={form.control}
           name="name"
           render={({ field }) => (
@@ -215,6 +172,39 @@ function EditProductForm() {
                 <Input {...field} />
               </FormControl>
               <FormMessage />
+            </FormItem>
+          )}
+        />
+
+        {/* YENİ: Resim URL'i için metin kutusu */}
+        <FormField
+          control={form.control}
+          name="image_url"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Resim URL'i</FormLabel>
+              <div className="flex items-start gap-4">
+                <Image
+                  src={
+                    field.value ||
+                    "https://placehold.co/100x100/e2e8f0/94a3b8?text=G%C3%B6rsel"
+                  }
+                  alt="Ürün Görseli"
+                  width={100}
+                  height={100}
+                  className="rounded-lg border object-cover"
+                />
+                <div className="w-full">
+                  <FormControl>
+                    <Input placeholder="https://i.ibb.co/..." {...field} />
+                  </FormControl>
+                  <FormDescription className="mt-2">
+                    Resmi [imgbb.com](https://imgbb.com/) gibi bir siteye
+                    yükleyip "Direct link"i buraya yapıştırın.
+                  </FormDescription>
+                  <FormMessage />
+                </div>
+              </div>
             </FormItem>
           )}
         />
@@ -247,7 +237,7 @@ function EditProductForm() {
                 >
                   <FormControl>
                     <SelectTrigger>
-                      <SelectValue placeholder="Bir kategori seçin" />
+                      <SelectValue />
                     </SelectTrigger>
                   </FormControl>
                   <SelectContent>

@@ -1,4 +1,3 @@
-// components/ProductImage.tsx
 "use client";
 
 import Image from "next/image";
@@ -12,6 +11,14 @@ interface ProductImageProps {
   className?: string;
 }
 
+// Yardımcı fonksiyon: Sadece izin verilen domainlerden gelen görselleri döndür
+function getValidImageUrl(url?: string) {
+  if (!url) return "/placeholder.png";
+  if (url.startsWith("https://i.ibb.co/")) return url;
+  if (url.startsWith("https://placehold.co/")) return url;
+  return "/placeholder.png";
+}
+
 const ProductImage: React.FC<ProductImageProps> = ({
   src,
   alt,
@@ -21,7 +28,6 @@ const ProductImage: React.FC<ProductImageProps> = ({
 }) => {
   const [imageError, setImageError] = useState(false);
 
-  // Eğer src yoksa veya resim yüklenirken hata oluştuysa placeholder göster
   if (!src || imageError) {
     return (
       <div
@@ -35,14 +41,12 @@ const ProductImage: React.FC<ProductImageProps> = ({
 
   return (
     <Image
-      src={src}
+      src={getValidImageUrl(src)}
       alt={alt}
       width={width}
       height={height}
       className={className}
-      onError={() => {
-        setImageError(true);
-      }}
+      onError={() => setImageError(true)}
     />
   );
 };

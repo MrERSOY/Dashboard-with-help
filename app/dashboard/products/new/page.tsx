@@ -28,8 +28,27 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Camera, X } from "lucide-react";
+import { useState, useEffect } from "react";
+import { BarcodeScanner } from "@/components/ui/barcode-scanner";
+import Image from "next/image";
 
-// Form şeması (API ile aynı)
+// Kapsamlı kategori listesi
+const allCategories = [
+  "Elektronik",
+  "Giyim & Moda",
+  "Ev, Yaşam & Bahçe",
+  "Kozmetik & Kişisel Bakım",
+  "Anne & Bebek",
+  "Kitap, Müzik & Film",
+  "Spor & Outdoor",
+  "Oyuncak & Hobi",
+  "Gıda",
+  "Otomotiv & Motosiklet",
+  "Yapı Market",
+];
+
+// Form şeması güncellendi: image_url opsiyonel bir URL
 const productFormSchema = z.object({
   name: z.string().min(3, { message: "Ürün adı en az 3 karakter olmalıdır." }),
   description: z.string().optional(),
@@ -41,29 +60,54 @@ const productFormSchema = z.object({
     .number({ invalid_type_error: "Lütfen geçerli bir stok girin." })
     .int(),
   barcode: z.string().min(1, { message: "Barkod alanı zorunludur." }),
+  image_url: z
+    .string()
+    .url({ message: "Lütfen geçerli bir URL girin." })
+    .optional()
+    .or(z.literal("")),
 });
 
 type ProductFormData = z.infer<typeof productFormSchema>;
 
+// Formun kendisini içeren asıl bileşen
 function NewProductForm() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const barcodeFromUrl = searchParams.get("barcode");
+
+  const [showScanner, setShowScanner] = useState(false);
+
   const form = useForm<ProductFormData>({
     resolver: zodResolver(productFormSchema),
     defaultValues: {
-      category: "Elektronik",
-      barcode: "",
+      category: allCategories[0],
+      barcode: barcodeFromUrl || "",
       name: "",
       description: "",
       price: 0,
       stock: 0,
+      image_url: "",
     },
   });
+
+  // URL'den gelen barkodu forma atamak için
+  useEffect(() => {
+    if (barcodeFromUrl) {
+      form.setValue("barcode", barcodeFromUrl, { shouldValidate: true });
+    }
+  }, [barcodeFromUrl, form]);
+
+  // Barkod tarayıcı tamamlandığında
+  const handleScanComplete = (scannedBarcode: string) => {
+    form.setValue("barcode", scannedBarcode, { shouldValidate: true });
+    setShowScanner(false);
+  };
 
   async function onSubmit(data: ProductFormData) {
     const promise = fetch("/api/products", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ...data, image_url: null }), // Şimdilik resim olmadan gönderiyoruz
+      body: JSON.stringify(data), // image_url artık form verisinin bir parçası
     }).then(async (response) => {
       if (!response.ok) {
         const errorData = await response.json();
@@ -82,114 +126,194 @@ function NewProductForm() {
     });
   }
 
+  // Resim URL'ini anlık olarak takip etmek için
+  const imageUrl = form.watch("image_url");
+
   return (
-    <Form {...form}>
-      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
-        <FormField
-          control={form.control}
-          name="name"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Ürün Adı</FormLabel>
-              <FormControl>
-                <Input placeholder="Örn: Akıllı Telefon X1 Pro" {...field} />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-        <FormField
-          control={form.control}
-          name="barcode"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Barkod</FormLabel>
-              <FormControl>
-                <Input placeholder="Ürün barkodunu girin" {...field} />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+    <>
+      <Form {...form}>
+        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
           <FormField
             control={form.control}
-            name="category"
+            name="name"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Kategori</FormLabel>
-                <Select
-                  onValueChange={field.onChange}
-                  defaultValue={field.value}
-                >
+                <FormLabel>Ürün Adı</FormLabel>
+                <FormControl>
+                  <Input placeholder="Örn: Akıllı Telefon X1 Pro" {...field} />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          <FormField
+            control={form.control}
+            name="image_url"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Resim URL'i</FormLabel>
+                <div className="flex items-start gap-4">
+                  <Image
+                    src={
+                      imageUrl ||
+                      "https://placehold.co/100x100/e2e8f0/94a3b8?text=G%C3%B6rsel"
+                    }
+                    alt="Ürün Görsel Önizlemesi"
+                    width={100}
+                    height={100}
+                    className="rounded-lg border object-cover"
+                  />
+                  <div className="w-full">
+                    <FormControl>
+                      <Input placeholder="https://i.ibb.co/..." {...field} />
+                    </FormControl>
+                    <FormDescription className="mt-2">
+                      Resmi [imgbb.com](https://imgbb.com/) gibi bir siteye
+                      yükleyip "Direct link"i buraya yapıştırın.
+                    </FormDescription>
+                    <FormMessage />
+                  </div>
+                </div>
+              </FormItem>
+            )}
+          />
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+            <FormField
+              control={form.control}
+              name="barcode"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Barkod</FormLabel>
+                  <div className="flex gap-2">
+                    <FormControl>
+                      <Input
+                        placeholder="Ürün barkodunu girin veya taratın"
+                        {...field}
+                      />
+                    </FormControl>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => setShowScanner(true)}
+                    >
+                      <Camera className="h-4 w-4" />
+                    </Button>
+                  </div>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="category"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Kategori</FormLabel>
+                  <Select
+                    onValueChange={field.onChange}
+                    defaultValue={field.value}
+                  >
+                    <FormControl>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      {allCategories.map((cat) => (
+                        <SelectItem key={cat} value={cat}>
+                          {cat}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          </div>
+
+          {/* Diğer form alanları... */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+            <FormField
+              control={form.control}
+              name="price"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Fiyat (₺)</FormLabel>
                   <FormControl>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
+                    <Input type="number" step="0.01" {...field} />
                   </FormControl>
-                  <SelectContent>
-                    <SelectItem value="Elektronik">Elektronik</SelectItem>
-                    <SelectItem value="Giyim & Moda">Giyim & Moda</SelectItem>
-                    <SelectItem value="Gıda">Gıda</SelectItem>
-                  </SelectContent>
-                </Select>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="stock"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Stok Adedi</FormLabel>
+                  <FormControl>
+                    <Input type="number" step="1" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          </div>
+
           <FormField
             control={form.control}
-            name="price"
+            name="description"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Fiyat (₺)</FormLabel>
+                <FormLabel>Ürün Açıklaması</FormLabel>
                 <FormControl>
-                  <Input type="number" step="0.01" {...field} />
+                  <Textarea
+                    placeholder="Ürünün özelliklerini ve detaylarını buraya yazın..."
+                    {...field}
+                  />
                 </FormControl>
                 <FormMessage />
               </FormItem>
             )}
           />
-          <FormField
-            control={form.control}
-            name="stock"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Stok Adedi</FormLabel>
-                <FormControl>
-                  <Input type="number" step="1" {...field} />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
+
+          <div className="flex justify-end">
+            <Button type="submit" disabled={form.formState.isSubmitting}>
+              {form.formState.isSubmitting ? "Kaydediliyor..." : "Ürünü Kaydet"}
+            </Button>
+          </div>
+        </form>
+      </Form>
+
+      {/* Barkod okuyucu modalı */}
+      {showScanner && (
+        <div className="fixed inset-0 z-50 bg-black bg-opacity-75 flex items-center justify-center p-4">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-lg p-4 relative">
+            <h3 className="text-lg font-medium mb-4">Barkodu Okutun</h3>
+            <button
+              onClick={() => setShowScanner(false)}
+              className="absolute top-2 right-2 p-1 rounded-full bg-gray-100 hover:bg-gray-200"
+            >
+              <X size={20} />
+            </button>
+            <BarcodeScanner
+              onScanSuccess={handleScanComplete}
+              onScanError={(error) =>
+                toast.error("Barkod okuma hatası: " + error.message)
+              }
+            />
+          </div>
         </div>
-        <FormField
-          control={form.control}
-          name="description"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Ürün Açıklaması</FormLabel>
-              <FormControl>
-                <Textarea
-                  placeholder="Ürünün özelliklerini yazın..."
-                  {...field}
-                />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-        <div className="flex justify-end">
-          <Button type="submit" disabled={form.formState.isSubmitting}>
-            {form.formState.isSubmitting ? "Kaydediliyor..." : "Ürünü Kaydet"}
-          </Button>
-        </div>
-      </form>
-    </Form>
+      )}
+    </>
   );
 }
 
+// Ana sayfa bileşeni, Toaster ve Suspense sarmalayıcısı kullanır
 export default function NewProductPage() {
   return (
     <div>
