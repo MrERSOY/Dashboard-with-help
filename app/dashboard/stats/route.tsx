@@ -1,13 +1,9 @@
 // app/api/dashboard/stats/route.ts
 import { NextResponse } from "next/server";
-import clientPromise from "@/lib/mongodb";
-import { MongoClient } from "mongodb";
+import prisma from "@/lib/prisma"; // Prisma istemcisini import ediyoruz
 
 export async function GET() {
   try {
-    const client: MongoClient = await clientPromise;
-    const db = client.db("Dashboard");
-
     // Bugünün başlangıcını temsil eden bir tarih objesi oluştur
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -18,51 +14,62 @@ export async function GET() {
       productCount,
       totalStockData,
       categoryData,
-      newUsersToday, // Yeni istatistik
-      newProductsToday, // Yeni istatistik
-    ] = await Promise.all([
-      db.collection("users").countDocuments(),
-      db.collection("products").countDocuments(),
-      db
-        .collection("products")
-        .aggregate([{ $group: { _id: null, total: { $sum: "$stock" } } }])
-        .toArray(),
-      db
-        .collection("products")
-        .aggregate([
-          { $group: { _id: "$category", count: { $sum: 1 } } },
-          { $sort: { count: -1 } },
-          { $limit: 1 },
-        ])
-        .toArray(),
-      // Bugün kayıt olan kullanıcıların sayısı
-      db.collection("users").countDocuments({ createdAt: { $gte: today } }),
-      // Bugün eklenen ürünlerin sayısı
-      db.collection("products").countDocuments({ createdAt: { $gte: today } }),
-    ]);
-
-    // Toplam ciro için basit bir varsayım
-    const revenueData = await db
-      .collection("products")
-      .aggregate([
-        {
-          $group: {
-            _id: null,
-            total: { $sum: { $multiply: ["$price", 0.5] } },
+      newUsersToday,
+      newProductsToday,
+      revenueData,
+    ] = await prisma.$transaction([
+      prisma.user.count(),
+      prisma.product.count(),
+      prisma.product.aggregate({
+        _sum: {
+          stock: true,
+        },
+      }),
+      prisma.product.groupBy({
+        by: ["category"],
+        _count: {
+          category: true,
+        },
+        orderBy: {
+          _count: {
+            category: "desc",
           },
         },
-      ])
-      .toArray();
+        take: 1,
+      }),
+      // Bugün kayıt olan kullanıcıların sayısı
+      prisma.user.count({
+        where: {
+          createdAt: {
+            gte: today,
+          },
+        },
+      }),
+      // Bugün eklenen ürünlerin sayısı
+      prisma.product.count({
+        where: {
+          createdAt: {
+            gte: today,
+          },
+        },
+      }),
+      // Toplam ciro için basit bir varsayım (tüm ürünlerin yarısının satıldığı varsayımı)
+      // Gerçekte bu veri 'orders' tablosundan gelmelidir.
+      prisma.product.aggregate({
+        _sum: {
+          price: true,
+        },
+      }),
+    ]);
 
     const stats = {
       userCount,
       productCount,
-      totalStock: totalStockData[0]?.total || 0,
-      estimatedRevenue: revenueData[0]?.total || 0,
-      topCategory: categoryData[0]?._id || "N/A",
-      // Simülasyon verileri yerine gerçek veriler
-      dailyOrders: newProductsToday, // Artık "Bugün Eklenen Ürünler"
-      dailyComplaints: newUsersToday, // Artık "Bugün Kaydolan Kullanıcılar"
+      totalStock: totalStockData._sum.stock || 0,
+      estimatedRevenue: (revenueData._sum.price || 0) * 0.5,
+      topCategory: categoryData[0]?.category || "N/A",
+      dailyOrders: newProductsToday,
+      dailyComplaints: newUsersToday,
     };
 
     return NextResponse.json(stats);

@@ -1,23 +1,26 @@
 // next.config.ts
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  // `images` yapılandırması, Next.js'in harici domain'lerden resim
+  // yüklemesine izin vermek için gereklidir.
   images: {
     remotePatterns: [
+      // Cloudinary'den gelen resimlere izin veriyoruz.
+      // Bu kural, Cloudinary hesabınızdan gelen tüm resimlere izin verir.
       {
         protocol: "https",
-        hostname: "i.ibb.co", // imgbb.com için
-        port: "",
-        pathname: "/**", // Bu domaindeki tüm yollara izin ver
+        hostname: "res.cloudinary.com",
       },
+      // Kodumuzda kullandığımız yer tutucu (placeholder) resimlere izin ver
       {
         protocol: "https",
-        hostname: "placehold.co", // Placeholder resimler için
-        port: "",
-        pathname: "/**",
+        hostname: "placehold.co",
       },
-      // Gelecekte başka servisler eklerseniz buraya ekleyebilirsiniz.
     ],
   },
+  // Projenizin gerektirdiği başka özel yapılandırmalar varsa
+  // buraya eklenebilir. Şimdilik sadece resim ayarları yeterlidir.
 };
 
 module.exports = nextConfig;

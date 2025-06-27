@@ -15,6 +15,9 @@ import {
   Plus,
   MessageCircleWarning,
   ShoppingCart,
+  TrendingUp,
+  TrendingDown,
+  BadgeCent,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Line } from "react-chartjs-2";
@@ -47,6 +50,7 @@ ChartJS.register(
   Legend
 );
 
+// Gerekli CSS dosyalarını import et
 import "react-grid-layout/css/styles.css";
 import "react-resizable/css/styles.css";
 
@@ -59,6 +63,9 @@ interface DashboardStats {
   topCategory: string;
   dailyOrders: number;
   dailyComplaints: number;
+  monthlyIncome: number;
+  monthlyExpenses: number;
+  netProfit: number;
 }
 
 interface WidgetData {
@@ -67,7 +74,7 @@ interface WidgetData {
   icon: React.ElementType;
 }
 
-// YENİ: Tüm olası widget'ların tanımı
+// Tüm olası widget'ların tanımı
 const ALL_WIDGETS: Record<string, WidgetData> = {
   userCount: { id: "userCount", title: "Toplam Kullanıcı", icon: Users },
   productCount: { id: "productCount", title: "Toplam Ürün", icon: Package },
@@ -88,10 +95,22 @@ const ALL_WIDGETS: Record<string, WidgetData> = {
     title: "Bugün Gelen Kullanıcılar",
     icon: MessageCircleWarning,
   },
+  monthlyIncome: {
+    id: "monthlyIncome",
+    title: "Bu Ayki Gelir",
+    icon: TrendingUp,
+  },
+  monthlyExpenses: {
+    id: "monthlyExpenses",
+    title: "Bu Ayki Giderler",
+    icon: TrendingDown,
+  },
+  netProfit: { id: "netProfit", title: "Net Kâr", icon: BadgeCent },
 };
 
 const ResponsiveGridLayout = WidthProvider(Responsive);
 
+// Ana Dashboard Bileşeni
 export default function DashboardPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [stats, setStats] = useState<Partial<DashboardStats>>({});
@@ -99,6 +118,7 @@ export default function DashboardPage() {
   const [isMounted, setIsMounted] = useState(false);
   const [chartModalData, setChartModalData] = useState<WidgetData | null>(null);
 
+  // Veri çekme ve layout'u localStorage'dan yükleme
   useEffect(() => {
     async function fetchData() {
       try {
@@ -115,10 +135,12 @@ export default function DashboardPage() {
     if (savedLayout) {
       setLayout(JSON.parse(savedLayout));
     } else {
+      // Varsayılan layout
       const defaultLayout: Layout[] = [
-        { i: "dailyOrders", x: 0, y: 0, w: 1, h: 1, minW: 1, minH: 1 },
-        { i: "estimatedRevenue", x: 1, y: 0, w: 2, h: 1, minW: 2, minH: 1 },
-        { i: "userCount", x: 3, y: 0, w: 1, h: 1, minW: 1, minH: 1 },
+        { i: "userCount", x: 0, y: 0, w: 1, h: 1, minW: 1, minH: 1 },
+        { i: "productCount", x: 1, y: 0, w: 1, h: 1, minW: 1, minH: 1 },
+        { i: "totalStock", x: 2, y: 0, w: 1, h: 1, minW: 1, minH: 1 },
+        { i: "estimatedRevenue", x: 0, y: 1, w: 2, h: 1, minW: 2, minH: 1 },
       ];
       setLayout(defaultLayout);
     }
@@ -166,7 +188,9 @@ export default function DashboardPage() {
     (widget) => !layout.some((item) => item.i === widget.id)
   );
 
-  if (!isMounted) return null;
+  if (!isMounted) {
+    return null; // Sunucu tarafı render ile istemci tarafı render arasında uyumsuzluk olmaması için
+  }
 
   return (
     <div>
@@ -211,8 +235,18 @@ export default function DashboardPage() {
             if (!widgetInfo) return null;
 
             let value = stats[widgetInfo.id as keyof DashboardStats];
-            if (widgetInfo.id === "estimatedRevenue")
-              value = `₺${Number(value).toLocaleString("tr-TR")}`;
+            if (
+              [
+                "estimatedRevenue",
+                "monthlyIncome",
+                "monthlyExpenses",
+                "netProfit",
+              ].includes(widgetInfo.id)
+            ) {
+              value = `₺${Number(value).toLocaleString("tr-TR", {
+                minimumFractionDigits: 2,
+              })}`;
+            }
 
             return (
               <div
