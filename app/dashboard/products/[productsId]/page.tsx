@@ -1,10 +1,9 @@
 // app/api/products/[productId]/route.ts
 import { NextResponse } from "next/server";
-import clientPromise from "@/lib/mongodb";
-import { MongoClient, ObjectId } from "mongodb";
+import prisma from "@/lib/prisma";
 import { z } from "zod";
 
-// Güncelleme için Zod şeması
+// Güncelleme için Zod şeması (tüm alanlar opsiyonel)
 const productUpdateSchema = z.object({
   name: z.string().min(3).optional(),
   description: z.string().optional(),
@@ -15,46 +14,33 @@ const productUpdateSchema = z.object({
   image_url: z.string().url().nullable().optional(),
 });
 
-// YENİ: Tek bir ürünü getiren GET metodu
+// Tek bir ürünü getiren GET fonksiyonu
 export async function GET(
-  request: Request,
+  req: Request,
   { params }: { params: { productId: string } }
 ) {
   try {
-    const productId = params.productId;
-    if (!ObjectId.isValid(productId)) {
-      return NextResponse.json({ error: "Geçersiz Ürün ID." }, { status: 400 });
-    }
-
-    const client: MongoClient = await clientPromise;
-    const db = client.db("Dashboard");
-    const product = await db
-      .collection("products")
-      .findOne({ _id: new ObjectId(productId) });
+    const product = await prisma.product.findUnique({
+      where: { id: params.productId },
+    });
 
     if (!product) {
       return NextResponse.json({ error: "Ürün bulunamadı." }, { status: 404 });
     }
-
     return NextResponse.json(product);
   } catch (error) {
-    console.error("Get Product API error:", error);
-    return NextResponse.json({ error: "İç sunucu hatası." }, { status: 500 });
+    console.error(`GET /api/products/${params.productId} error:`, error);
+    return NextResponse.json({ error: "Sunucu hatası." }, { status: 500 });
   }
 }
 
-// Ürün Güncelleme (PATCH) metodu
+// Bir ürünü güncelleyen PATCH fonksiyonu
 export async function PATCH(
-  request: Request,
+  req: Request,
   { params }: { params: { productId: string } }
 ) {
   try {
-    const productId = params.productId;
-    if (!ObjectId.isValid(productId)) {
-      return NextResponse.json({ error: "Geçersiz Ürün ID." }, { status: 400 });
-    }
-
-    const body = await request.json();
+    const body = await req.json();
     const validation = productUpdateSchema.safeParse(body);
 
     if (!validation.success) {
@@ -64,62 +50,29 @@ export async function PATCH(
       );
     }
 
-    const client: MongoClient = await clientPromise;
-    const db = client.db("Dashboard");
-
-    const result = await db
-      .collection("products")
-      .updateOne(
-        { _id: new ObjectId(productId) },
-        { $set: { ...validation.data, updatedAt: new Date() } }
-      );
-
-    if (result.matchedCount === 0) {
-      return NextResponse.json(
-        { error: "Güncellenecek ürün bulunamadı." },
-        { status: 404 }
-      );
-    }
-
-    // Güncellenen veriyi geri döndürelim
-    const updatedProduct = await db
-      .collection("products")
-      .findOne({ _id: new ObjectId(productId) });
-    return NextResponse.json(updatedProduct);
+    const product = await prisma.product.update({
+      where: { id: params.productId },
+      data: { ...validation.data, updatedAt: new Date() },
+    });
+    return NextResponse.json(product);
   } catch (error) {
-    console.error("Update Product API error:", error);
-    return NextResponse.json({ error: "İç sunucu hatası." }, { status: 500 });
+    console.error(`PATCH /api/products/${params.productId} error:`, error);
+    return NextResponse.json({ error: "Güncelleme hatası." }, { status: 500 });
   }
 }
 
-// Ürün Silme (DELETE) metodu
+// Bir ürünü silen DELETE fonksiyonu
 export async function DELETE(
-  request: Request,
+  req: Request,
   { params }: { params: { productId: string } }
 ) {
   try {
-    const productId = params.productId;
-    if (!ObjectId.isValid(productId)) {
-      return NextResponse.json({ error: "Geçersiz Ürün ID." }, { status: 400 });
-    }
-
-    const client: MongoClient = await clientPromise;
-    const db = client.db("Dashboard");
-
-    const result = await db
-      .collection("products")
-      .deleteOne({ _id: new ObjectId(productId) });
-
-    if (result.deletedCount === 0) {
-      return NextResponse.json(
-        { error: "Silinecek ürün bulunamadı." },
-        { status: 404 }
-      );
-    }
-
+    await prisma.product.delete({
+      where: { id: params.productId },
+    });
     return new NextResponse(null, { status: 204 }); // Başarılı, içerik yok
   } catch (error) {
-    console.error("Delete Product API error:", error);
-    return NextResponse.json({ error: "İç sunucu hatası." }, { status: 500 });
+    console.error(`DELETE /api/products/${params.productId} error:`, error);
+    return NextResponse.json({ error: "Silme hatası." }, { status: 500 });
   }
 }

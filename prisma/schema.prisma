@@ -1,13 +1,36 @@
 // prisma/schema.prisma
+
+// 1. Veritabanı bağlantısı ve Prisma Client tanımı
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
 generator client {
   provider = "prisma-client-js"
 }
 
-datasource db {
-  provider  = "postgresql"
-  url       = env("POSTGRES_URL")
-  directUrl = env("POSTGRES_URL_NON_POOLING")
+// 2. Enum Tanımları
+enum UserRole {
+  CUSTOMER
+  STAFF
+  ADMIN
 }
+
+enum OrderStatus {
+  PENDING
+  PAID
+  SHIPPED
+  DELIVERED
+  CANCELLED
+}
+
+enum OrderOrigin {
+  ONLINE
+  IN_STORE
+}
+
+// 3. Veritabanı Modelleri
 
 model User {
   id            String    @id @default(cuid())
@@ -16,27 +39,113 @@ model User {
   emailVerified DateTime?
   image         String?
   password      String?
-  role          String    @default("user")
-  status        String    @default("active")
-  accounts      Account[]
-  sessions      Session[]
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  role          UserRole  @default(CUSTOMER)
+
+  // İlişkiler
+  accounts  Account[]
+  sessions  Session[]
+  cart      Cart? // Her kullanıcının bir sepeti olabilir
+  orders    Order[]
+  addresses Address[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model Product {
   id          String   @id @default(cuid())
   name        String
-  description String?
-  category    String
+  description String?  @db.Text
   price       Float
-  stock       Int
-  barcode     String   @unique
-  image_url   String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  images      String[]
+  stock       Int      @default(0)
+  barcode     String?  @unique
+
+  // İlişkiler
+  category   Category?   @relation(fields: [categoryId], references: [id])
+  categoryId String?
+  orderItems OrderItem[]
+  cartItems  CartItem[] // Ürünün hangi sepetlerde olduğunu gösterir
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
+model Category {
+  id       String    @id @default(cuid())
+  name     String    @unique
+  products Product[]
+}
+
+model Cart {
+  id String @id @default(cuid())
+
+  // İlişkiler
+  user   User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId String     @unique // Her kullanıcının sadece bir sepeti olabilir
+  items  CartItem[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model CartItem {
+  id       String @id @default(cuid())
+  quantity Int
+
+  // İlişkiler
+  cart      Cart    @relation(fields: [cartId], references: [id], onDelete: Cascade)
+  cartId    String
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  productId String
+
+  @@unique([cartId, productId]) // Bir ürün bir sepete sadece bir kez eklenebilir
+}
+
+model Order {
+  id     String      @id @default(cuid())
+  total  Float
+  status OrderStatus @default(PENDING)
+  origin OrderOrigin @default(ONLINE)
+
+  // İlişkiler
+  user      User        @relation(fields: [userId], references: [id])
+  userId    String
+  items     OrderItem[]
+  address   Address?    @relation(fields: [addressId], references: [id])
+  addressId String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model OrderItem {
+  id       String @id @default(cuid())
+  quantity Int
+  price    Float
+
+  // İlişkiler
+  order     Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  orderId   String
+  product   Product @relation(fields: [productId], references: [id])
+  productId String
+}
+
+model Address {
+  id         String  @id @default(cuid())
+  street     String
+  city       String
+  postalCode String
+  country    String
+  isDefault  Boolean @default(false)
+
+  // İlişkiler
+  user   User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId String
+  orders Order[]
+}
+
+// --- NextAuth Modelleri ---
 model Account {
   id                String  @id @default(cuid())
   userId            String

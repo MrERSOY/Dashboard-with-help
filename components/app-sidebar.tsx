@@ -4,7 +4,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
-import { useSidebar } from "@/components/ui/sidebar"; // Durumu almak için hook
+import { useSidebar } from "@/components/ui/sidebar";
 import {
   Tooltip,
   TooltipContent,
@@ -13,29 +13,26 @@ import {
 } from "@/components/ui/tooltip";
 import {
   LayoutDashboard,
-  PlusCircle,
   Recycle,
   BarChart3,
   FolderKanban,
-  Users2,
-  Library,
+  Users2, // Bu ikon "Kullanıcılar" için kullanılıyor
   FileText,
   MessageCircleQuestion,
-  MoreHorizontal,
-  Mail,
   Settings,
-  HelpCircle,
-  Search,
-  Bell,
 } from "lucide-react";
 
+// Ana navigasyon linkleri
 const mainNavLinks = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/dashboard/lifecycle", label: "Stok Takibi", icon: Recycle },
   { href: "/dashboard/analytics", label: "Analitik", icon: BarChart3 },
   { href: "/dashboard/products", label: "Ürün Yönetimi", icon: FolderKanban },
-  { href: "/dashboard/team", label: "Kullanıcılar", icon: Users2 },
+  // GÜNCELLENDİ: 'team' yolu 'users' olarak değiştirildi.
+  { href: "/dashboard/users", label: "Kullanıcılar", icon: Users2 },
 ];
+
+// İkincil navigasyon linkleri
 const secondaryNavLinks = [
   { href: "/dashboard/reports", label: "Raporlar", icon: FileText },
   {

@@ -1,19 +1,19 @@
 // app/api/dashboard/stats/route.ts
+
 import { NextResponse } from "next/server";
-import prisma from "@/lib/prisma"; // Prisma istemcisini import ediyoruz
+import prisma from "@/lib/prisma";
 
 export async function GET() {
   try {
-    // Bugünün başlangıcını temsil eden bir tarih objesi oluştur
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
-    // Aynı anda birden fazla sorgu çalıştırarak verileri topla
+    // Veri toplama sorgularını bir transaction içinde çalıştır
     const [
       userCount,
       productCount,
       totalStockData,
-      categoryData,
+      categoryGroup, // Bu sorgu düzeltildi
       newUsersToday,
       newProductsToday,
       revenueData,
@@ -21,55 +21,58 @@ export async function GET() {
       prisma.user.count(),
       prisma.product.count(),
       prisma.product.aggregate({
-        _sum: {
-          stock: true,
-        },
+        _sum: { stock: true },
       }),
+      // DÜZELTME: groupBy, ilişki alanı yerine scalar ID alanı ('categoryId') üzerinden yapıldı.
       prisma.product.groupBy({
-        by: ["category"],
+        by: ["categoryId"],
         _count: {
-          category: true,
+          categoryId: true,
+        },
+        where: {
+          categoryId: {
+            not: null, // Kategorisi olmayan ürünleri sayma
+          },
         },
         orderBy: {
           _count: {
-            category: "desc",
+            categoryId: "desc",
           },
         },
         take: 1,
       }),
-      // Bugün kayıt olan kullanıcıların sayısı
       prisma.user.count({
-        where: {
-          createdAt: {
-            gte: today,
-          },
-        },
+        where: { createdAt: { gte: today } },
       }),
-      // Bugün eklenen ürünlerin sayısı
       prisma.product.count({
-        where: {
-          createdAt: {
-            gte: today,
-          },
-        },
+        where: { createdAt: { gte: today } },
       }),
-      // Toplam ciro için basit bir varsayım (tüm ürünlerin yarısının satıldığı varsayımı)
-      // Gerçekte bu veri 'orders' tablosundan gelmelidir.
+      // Not: Bu ciro hesaplaması geçicidir. Gerçek bir sipariş sisteminde
+      // bu veri 'Order' tablosundan gelmelidir.
       prisma.product.aggregate({
-        _sum: {
-          price: true,
-        },
+        _sum: { price: true },
       }),
     ]);
+
+    let topCategoryName = "N/A";
+    // Eğer en çok tekrar eden bir kategori bulunduysa, adını veritabanından çek
+    if (categoryGroup.length > 0 && categoryGroup[0].categoryId) {
+      const topCategory = await prisma.category.findUnique({
+        where: { id: categoryGroup[0].categoryId },
+      });
+      if (topCategory) {
+        topCategoryName = topCategory.name;
+      }
+    }
 
     const stats = {
       userCount,
       productCount,
       totalStock: totalStockData._sum.stock || 0,
-      estimatedRevenue: (revenueData._sum.price || 0) * 0.5,
-      topCategory: categoryData[0]?.category || "N/A",
-      dailyOrders: newProductsToday,
-      dailyComplaints: newUsersToday,
+      estimatedRevenue: (revenueData._sum.price || 0) * 0.5, // Geçici ciro mantığı
+      topCategory: topCategoryName,
+      dailyOrders: newProductsToday, // Bugün eklenen ürün sayısını temsil eder
+      dailyComplaints: newUsersToday, // Bugün eklenen kullanıcı sayısını temsil eder
     };
 
     return NextResponse.json(stats);

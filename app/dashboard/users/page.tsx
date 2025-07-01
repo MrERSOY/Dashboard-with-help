@@ -2,7 +2,6 @@
 "use client"; // State yönetimi (arama, sayfalama) için Client Component
 
 import { useState, useEffect, useMemo } from "react";
-import { supabase } from "@/lib/supabase";
 import Image from "next/image";
 import { MailPlus, Search, ChevronLeft, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -13,9 +12,9 @@ interface User {
   id: string;
   name: string | null;
   email: string | null;
-  role: string | null; // Veritabanından gelecek
-  status: string | null; // Veritabanından gelecek
-  avatar: string; // Şimdilik sahte kalacak
+  role: string | null;
+  status: string | null;
+  image?: string | null; // Prisma şemasındaki 'image' alanı
 }
 
 export default function TeamPage() {
@@ -27,27 +26,17 @@ export default function TeamPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const ITEMS_PER_PAGE = 8;
 
-  // Supabase'den kullanıcıları çekmek için useEffect
+  // Prisma tabanlı API'den kullanıcıları çekmek için useEffect
   useEffect(() => {
     async function fetchUsers() {
       setIsLoading(true);
       setError(null);
       try {
-        // GÜNCELLEME: select sorgusuna 'role' ve 'status' eklendi
-        const { data, error: dbError } = await supabase
-          .from("users")
-          .select("id, name, email, role, status") // 'role' ve 'status' sütunlarını çek
-          .order("created_at", { ascending: false });
+        const response = await fetch("/api/users");
+        if (!response.ok) throw new Error("API'den kullanıcılar çekilemedi");
 
-        if (dbError) throw dbError;
-
-        // GÜNCELLEME: Sahte rol/durum ataması kaldırıldı. Avatar sahte kalıyor.
-        const mappedUsers = (data || []).map((user, index) => ({
-          ...user,
-          avatar: `/images/avatars/avatar-${(index % 5) + 1}.png`, // Örnek avatar yolları
-        }));
-
-        setAllUsers(mappedUsers);
+        const usersData = await response.json();
+        setAllUsers(usersData || []);
       } catch (err) {
         setError(
           err instanceof Error
@@ -61,7 +50,7 @@ export default function TeamPage() {
     fetchUsers();
   }, []);
 
-  // Arama ve sayfalama mantığı (değişiklik yok)
+  // Arama ve sayfalama mantığı
   const filteredUsers = useMemo(() => {
     if (!searchTerm) return allUsers;
     return allUsers.filter(
@@ -123,7 +112,12 @@ export default function TeamPage() {
                 >
                   <div className="flex items-center gap-4">
                     <Image
-                      src={member.avatar}
+                      src={
+                        member.image ||
+                        `/images/avatars/avatar-${
+                          (parseInt(member.id.slice(-1), 16) % 5) + 1
+                        }.png`
+                      }
                       alt={member.name || "Avatar"}
                       width={40}
                       height={40}
@@ -143,12 +137,12 @@ export default function TeamPage() {
                     </div>
                   </div>
                   <div className="flex items-center gap-4 w-full sm:w-auto justify-end">
-                    <p className="text-sm text-muted-foreground w-20 text-center">
+                    <p className="text-sm text-muted-foreground w-20 text-center capitalize">
                       {member.role}
                     </p>
                     <span
                       className={`px-2 py-0.5 inline-flex text-xs leading-5 font-semibold rounded-full ${
-                        member.status === "Aktif"
+                        member.status === "active"
                           ? "bg-green-100 text-green-800"
                           : "bg-gray-100 text-gray-800"
                       }`}
@@ -193,7 +187,7 @@ export default function TeamPage() {
           </>
         ) : (
           <p className="text-center p-8 text-muted-foreground">
-            Bu kriterlere uygun kullanıcı bulunamadı.
+            Veritabanında hiç kullanıcı bulunamadı.
           </p>
         )}
       </div>

@@ -1,18 +1,33 @@
 // app/dashboard/products/edit/[productId]/page.tsx
 "use client";
 
-import { useEffect, useState, Suspense, useTransition } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter, useParams } from "next/navigation";
-import { useForm } from "react-hook-form";
+import { useForm, useFieldArray } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { Toaster, toast } from "sonner";
+import { Category, Product } from "@prisma/client";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Trash2 } from "lucide-react";
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@/components/ui/form";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -24,97 +39,100 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import {
-  Form,
-  FormControl,
-  FormField,
-  FormItem,
-  FormLabel,
-  FormMessage,
-  FormDescription,
-} from "@/components/ui/form";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import Image from "next/image";
+import { PlusCircle, Trash2 } from "lucide-react";
+import { Skeleton } from "@/components/ui/skeleton";
 
-// Kapsamlı kategori listesi
-const allCategories = [
-  "Elektronik",
-  "Giyim & Moda",
-  "Ev, Yaşam & Bahçe",
-  "Kozmetik & Kişisel Bakım",
-  "Anne & Bebek",
-  "Kitap, Müzik & Film",
-  "Spor & Outdoor",
-  "Oyuncak & Hobi",
-  "Gıda",
-  "Otomotiv & Motosiklet",
-  "Yapı Market",
-];
-
-// Form şeması güncellendi: image_url eklendi
+// Form için veri doğrulama şeması
 const productFormSchema = z.object({
   name: z.string().min(3, { message: "Ürün adı en az 3 karakter olmalıdır." }),
   description: z.string().optional(),
-  category: z.string({ required_error: "Lütfen bir kategori seçin." }),
-  price: z.coerce.number().min(0),
-  stock: z.coerce.number().int(),
-  barcode: z.string().min(1, { message: "Barkod alanı zorunludur." }),
-  image_url: z
-    .string()
-    .url({ message: "Lütfen geçerli bir URL girin." })
-    .optional()
-    .or(z.literal("")),
+  price: z.coerce
+    .number({ invalid_type_error: "Lütfen geçerli bir fiyat girin." })
+    .min(0),
+  stock: z.coerce
+    .number({ invalid_type_error: "Lütfen geçerli bir stok girin." })
+    .int(),
+  categoryId: z.string().min(1, { message: "Lütfen bir kategori seçin." }),
+  barcode: z.string().optional(),
+  images: z
+    .array(
+      z.object({
+        url: z.string().url({ message: "Lütfen geçerli bir URL girin." }),
+      })
+    )
+    .min(1, "En az bir resim URL'i eklenmelidir."),
 });
 
 type ProductFormData = z.infer<typeof productFormSchema>;
 
-// Formun mantığını ve arayüzünü içeren asıl bileşen
-function EditProductForm() {
+// Ana Sayfa Bileşeni
+export default function EditProductPage() {
   const router = useRouter();
   const params = useParams();
   const productId = params.productId as string;
 
+  const [categories, setCategories] = useState<Category[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isDeleting, setIsDeleting] = useState(false);
-  const [isPending, startTransition] = useTransition();
 
   const form = useForm<ProductFormData>({
     resolver: zodResolver(productFormSchema),
   });
 
-  // Ürün verisini çekmek ve formu doldurmak için
+  // Kategorileri ve ürün verisini çek
   useEffect(() => {
-    async function fetchProduct() {
-      setIsLoading(true);
+    async function fetchData() {
       try {
-        const response = await fetch(`/api/products/${productId}`);
-        if (!response.ok) {
-          const errorData = await response.json();
-          throw new Error(errorData.error || "Ürün bilgileri yüklenemedi.");
-        }
-        const productData = await response.json();
-        form.reset(productData);
-      } catch (error: any) {
-        toast.error(error.message);
+        const [categoryRes, productRes] = await Promise.all([
+          fetch("/api/categories"),
+          fetch(`/api/products/${productId}`),
+        ]);
+
+        if (!categoryRes.ok) throw new Error("Kategoriler yüklenemedi.");
+        if (!productRes.ok) throw new Error("Ürün bilgileri yüklenemedi.");
+
+        const categoryData = await categoryRes.json();
+        const productData: Product = await productRes.json();
+
+        setCategories(categoryData);
+
+        // DÜZELTME: form.reset içindeki verileri daha güvenli bir şekilde atıyoruz.
+        form.reset({
+          name: productData.name,
+          price: productData.price,
+          stock: productData.stock,
+          description: productData.description || "",
+          barcode: productData.barcode || "",
+          categoryId: productData.categoryId || "", // Hatanın kaynağı olan satır düzeltildi.
+          images: productData.images.map((url) => ({ url })),
+        });
+      } catch (error) {
+        toast.error((error as Error).message);
       } finally {
         setIsLoading(false);
       }
     }
-    if (productId) fetchProduct();
-  }, [productId, form, router]);
+    if (productId) {
+      fetchData();
+    }
+  }, [productId, form]);
 
-  // Form gönderildiğinde çalışacak fonksiyon
+  const { fields, append, remove } = useFieldArray({
+    control: form.control,
+    name: "images",
+  });
+
+  // Formu gönderme (ürünü güncelleme)
   async function onSubmit(data: ProductFormData) {
+    const formattedData = {
+      ...data,
+      images: data.images.map((img) => img.url),
+    };
+
     const promise = fetch(`/api/products/${productId}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(data), // Resim URL'i artık form verisinin bir parçası
+      body: JSON.stringify(formattedData),
     }).then(async (response) => {
       if (!response.ok) {
         const errorData = await response.json();
@@ -125,18 +143,16 @@ function EditProductForm() {
 
     toast.promise(promise, {
       loading: "Değişiklikler kaydediliyor...",
-      success: (res) => {
-        startTransition(() => {
-          router.push("/dashboard/products");
-          router.refresh();
-        });
+      success: () => {
+        router.push("/dashboard/products");
+        router.refresh();
         return `Ürün başarıyla güncellendi!`;
       },
       error: (err: any) => err.message,
     });
   }
 
-  // Ürünü silme fonksiyonu
+  // Ürünü silme
   const handleDelete = async () => {
     setIsDeleting(true);
     const promise = fetch(`/api/products/${productId}`, { method: "DELETE" });
@@ -144,214 +160,276 @@ function EditProductForm() {
     toast.promise(promise, {
       loading: "Ürün siliniyor...",
       success: () => {
-        startTransition(() => {
-          router.push("/dashboard/products");
-          router.refresh();
-        });
+        router.push("/dashboard/products");
+        router.refresh();
         return "Ürün başarıyla silindi.";
       },
-      error: "Ürün silinirken bir hata oluştu.",
+      error: (err) =>
+        (err as Error).message || "Ürün silinirken bir hata oluştu.",
       finally: () => setIsDeleting(false),
     });
   };
 
   if (isLoading) {
-    return <div className="text-center p-8">Ürün bilgileri yükleniyor...</div>;
+    return <PageSkeleton />;
   }
 
   return (
-    <Form {...form}>
-      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
-        <FormField
-          control={form.control}
-          name="name"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Ürün Adı</FormLabel>
-              <FormControl>
-                <Input {...field} />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
+    <>
+      <Toaster richColors position="top-right" />
+      <div>
+        <div className="flex justify-between items-center mb-6">
+          <h2 className="text-2xl font-semibold">Ürünü Düzenle</h2>
+        </div>
+        <div className="bg-card p-6 sm:p-8 rounded-lg shadow-md border">
+          <Form {...form}>
+            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
+              {/* --- FORM ALANLARI --- */}
 
-        {/* YENİ: Resim URL'i için metin kutusu */}
-        <FormField
-          control={form.control}
-          name="image_url"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Resim URL'i</FormLabel>
-              <div className="flex items-start gap-4">
-                <Image
-                  src={
-                    field.value ||
-                    "https://placehold.co/100x100/e2e8f0/94a3b8?text=G%C3%B6rsel"
-                  }
-                  alt="Ürün Görseli"
-                  width={100}
-                  height={100}
-                  className="rounded-lg border object-cover"
+              <FormField
+                control={form.control}
+                name="name"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Ürün Adı</FormLabel>
+                    <FormControl>
+                      <Input {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <div>
+                <FormLabel>Ürün Resimleri</FormLabel>
+                <div className="space-y-4 mt-2">
+                  {fields.map((field, index) => (
+                    <FormField
+                      key={field.id}
+                      control={form.control}
+                      name={`images.${index}.url`}
+                      render={({ field: inputField }) => (
+                        <FormItem>
+                          <div className="flex items-center gap-2">
+                            <FormControl>
+                              <Input
+                                placeholder="https://..."
+                                {...inputField}
+                              />
+                            </FormControl>
+                            {fields.length > 1 && (
+                              <Button
+                                type="button"
+                                variant="destructive"
+                                size="icon"
+                                onClick={() => remove(index)}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            )}
+                          </div>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  ))}
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="mt-4"
+                  onClick={() => append({ url: "" })}
+                >
+                  <PlusCircle size={16} className="mr-2" />
+                  Resim Ekle
+                </Button>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                <FormField
+                  control={form.control}
+                  name="barcode"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Barkod</FormLabel>
+                      <FormControl>
+                        <Input {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
                 />
-                <div className="w-full">
-                  <FormControl>
-                    <Input placeholder="https://i.ibb.co/..." {...field} />
-                  </FormControl>
-                  <FormDescription className="mt-2">
-                    Resmi [imgbb.com](https://imgbb.com/) gibi bir siteye
-                    yükleyip "Direct link"i buraya yapıştırın.
-                  </FormDescription>
-                  <FormMessage />
+                <FormField
+                  control={form.control}
+                  name="categoryId"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Kategori</FormLabel>
+                      <Select
+                        onValueChange={field.onChange}
+                        value={field.value || ""}
+                      >
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Bir kategori seçin..." />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          {categories.map((cat) => (
+                            <SelectItem key={cat.id} value={cat.id}>
+                              {cat.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                <FormField
+                  control={form.control}
+                  name="price"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Fiyat (₺)</FormLabel>
+                      <FormControl>
+                        <Input type="number" step="0.01" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="stock"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Stok Adedi</FormLabel>
+                      <FormControl>
+                        <Input type="number" step="1" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+
+              <FormField
+                control={form.control}
+                name="description"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Ürün Açıklaması</FormLabel>
+                    <FormControl>
+                      <Textarea
+                        placeholder="Ürünün özelliklerini..."
+                        className="min-h-[120px]"
+                        {...field}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              {/* --- EYLEM BUTONLARI --- */}
+
+              <div className="flex justify-between items-center mt-8 pt-5 border-t">
+                <AlertDialog>
+                  <AlertDialogTrigger asChild>
+                    <Button
+                      type="button"
+                      variant="destructive"
+                      disabled={isDeleting}
+                    >
+                      <Trash2 className="mr-2 h-4 w-4" /> Bu Ürünü Sil
+                    </Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>Emin misiniz?</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        Bu işlem geri alınamaz. Ürün kalıcı olarak silinecektir.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>İptal</AlertDialogCancel>
+                      <AlertDialogAction
+                        onClick={handleDelete}
+                        className="bg-destructive hover:bg-destructive/90"
+                      >
+                        Evet, Sil
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
+                <div className="flex gap-4">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => router.push("/dashboard/products")}
+                  >
+                    İptal
+                  </Button>
+                  <Button type="submit" disabled={form.formState.isSubmitting}>
+                    {form.formState.isSubmitting
+                      ? "Kaydediliyor..."
+                      : "Değişiklikleri Kaydet"}
+                  </Button>
                 </div>
               </div>
-            </FormItem>
-          )}
-        />
-
-        <FormField
-          control={form.control}
-          name="barcode"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Barkod</FormLabel>
-              <FormControl>
-                <Input {...field} />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-          <FormField
-            control={form.control}
-            name="category"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Kategori</FormLabel>
-                <Select
-                  onValueChange={field.onChange}
-                  defaultValue={field.value}
-                  value={field.value ?? ""}
-                >
-                  <FormControl>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                  </FormControl>
-                  <SelectContent>
-                    {allCategories.map((cat) => (
-                      <SelectItem key={cat} value={cat}>
-                        {cat}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-          <FormField
-            control={form.control}
-            name="price"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Fiyat (₺)</FormLabel>
-                <FormControl>
-                  <Input type="number" step="0.01" {...field} />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-          <FormField
-            control={form.control}
-            name="stock"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Stok Adedi</FormLabel>
-                <FormControl>
-                  <Input type="number" step="1" {...field} />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
+            </form>
+          </Form>
         </div>
-
-        <FormField
-          control={form.control}
-          name="description"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Ürün Açıklaması</FormLabel>
-              <FormControl>
-                <Textarea
-                  placeholder="Ürünün özelliklerini ve detaylarını buraya yazın..."
-                  {...field}
-                />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-
-        <div className="flex justify-between items-center mt-8 pt-5 border-t">
-          <AlertDialog>
-            <AlertDialogTrigger asChild>
-              <Button type="button" variant="destructive" disabled={isDeleting}>
-                <Trash2 className="mr-2 h-4 w-4" /> Bu Ürünü Sil
-              </Button>
-            </AlertDialogTrigger>
-            <AlertDialogContent>
-              <AlertDialogHeader>
-                <AlertDialogTitle>Emin misiniz?</AlertDialogTitle>
-                <AlertDialogDescription>
-                  Bu işlem geri alınamaz.
-                </AlertDialogDescription>
-              </AlertDialogHeader>
-              <AlertDialogFooter>
-                <AlertDialogCancel>İptal</AlertDialogCancel>
-                <AlertDialogAction
-                  onClick={handleDelete}
-                  className="bg-destructive hover:bg-destructive/90"
-                >
-                  Evet, Sil
-                </AlertDialogAction>
-              </AlertDialogFooter>
-            </AlertDialogContent>
-          </AlertDialog>
-          <div className="flex gap-4">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => router.push("/dashboard/products")}
-            >
-              İptal
-            </Button>
-            <Button type="submit" disabled={form.formState.isSubmitting}>
-              {form.formState.isSubmitting
-                ? "Kaydediliyor..."
-                : "Değişiklikleri Kaydet"}
-            </Button>
-          </div>
-        </div>
-      </form>
-    </Form>
+      </div>
+    </>
   );
 }
 
-// Ana sayfa bileşeni
-export default function EditProductPage() {
+// Yükleme durumu için iskelet bileşeni
+function PageSkeleton() {
   return (
-    <div>
-      <Toaster richColors position="top-right" />
-      <h2 className="text-2xl font-semibold mb-6">Ürünü Düzenle</h2>
-      <div className="bg-card p-8 rounded-lg shadow-md border">
-        <Suspense fallback={<div>Form yükleniyor...</div>}>
-          <EditProductForm />
-        </Suspense>
+    <div className="space-y-8">
+      <div className="flex justify-between items-center mb-6">
+        <Skeleton className="h-8 w-48" />
+      </div>
+      <div className="bg-card p-8 rounded-lg shadow-md border space-y-8">
+        <div className="space-y-2">
+          <Skeleton className="h-4 w-24" />
+          <Skeleton className="h-10 w-full" />
+        </div>
+        <div className="space-y-2">
+          <Skeleton className="h-4 w-24" />
+          <Skeleton className="h-10 w-full" />
+        </div>
+        <div className="grid grid-cols-2 gap-8">
+          <div className="space-y-2">
+            <Skeleton className="h-4 w-24" />
+            <Skeleton className="h-10 w-full" />
+          </div>
+          <div className="space-y-2">
+            <Skeleton className="h-4 w-24" />
+            <Skeleton className="h-10 w-full" />
+          </div>
+        </div>
+        <div className="grid grid-cols-2 gap-8">
+          <div className="space-y-2">
+            <Skeleton className="h-4 w-24" />
+            <Skeleton className="h-10 w-full" />
+          </div>
+          <div className="space-y-2">
+            <Skeleton className="h-4 w-24" />
+            <Skeleton className="h-10 w-full" />
+          </div>
+        </div>
+        <div className="space-y-2">
+          <Skeleton className="h-4 w-24" />
+          <Skeleton className="h-24 w-full" />
+        </div>
       </div>
     </div>
   );
