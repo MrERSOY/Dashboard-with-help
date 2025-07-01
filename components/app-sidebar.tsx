@@ -13,27 +13,34 @@ import {
 } from "@/components/ui/tooltip";
 import {
   LayoutDashboard,
-  Recycle,
+  Boxes, // YENİ: Stok Yönetimi için daha uygun bir ikon
   BarChart3,
   FolderKanban,
-  Users2, // Bu ikon "Kullanıcılar" için kullanılıyor
+  Users2,
   FileText,
   MessageCircleQuestion,
   Settings,
+  ShoppingCart, // YENİ: POS için ikon
 } from "lucide-react";
 
-// Ana navigasyon linkleri
-const mainNavLinks = [
+interface NavLink {
+  href: string;
+  label: string;
+  icon: React.ElementType;
+}
+
+const mainNavLinks: NavLink[] = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/dashboard/lifecycle", label: "Stok Takibi", icon: Recycle },
-  { href: "/dashboard/analytics", label: "Analitik", icon: BarChart3 },
-  { href: "/dashboard/products", label: "Ürün Yönetimi", icon: FolderKanban },
-  // GÜNCELLENDİ: 'team' yolu 'users' olarak değiştirildi.
+  { href: "/dashboard/pos", label: "Hızlı Satış (POS)", icon: ShoppingCart },
+  { href: "/dashboard/orders", label: "Siparişler", icon: FileText },
+  { href: "/dashboard/products", label: "Ürünler", icon: FolderKanban },
+  // GÜNCELLENDİ: "Stok Takibi" linki, yeni "Stok Yönetimi" sayfasıyla değiştirildi.
+  { href: "/dashboard/inventory", label: "Stok Yönetimi", icon: Boxes },
   { href: "/dashboard/users", label: "Kullanıcılar", icon: Users2 },
+  { href: "/dashboard/analytics", label: "Analitik", icon: BarChart3 },
 ];
 
-// İkincil navigasyon linkleri
-const secondaryNavLinks = [
+const secondaryNavLinks: NavLink[] = [
   { href: "/dashboard/reports", label: "Raporlar", icon: FileText },
   {
     href: "/dashboard/complaints",
@@ -47,7 +54,7 @@ export function AppSidebar() {
   const { state } = useSidebar();
   const isCollapsed = state === "collapsed";
 
-  const renderLink = (link: any, isTooltip: boolean) => {
+  const renderLink = (link: NavLink, isTooltip: boolean) => {
     const isActive =
       pathname === link.href ||
       (link.href !== "/dashboard" && pathname.startsWith(link.href));

@@ -2,11 +2,10 @@
 
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth/next";
-import { authOptions } from "../auth/[...nextauth]/route";
+import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 import prisma from "@/lib/prisma";
 import { z } from "zod";
 
-// Yeni ürün oluşturmak için veri doğrulama şeması
 const productSchema = z.object({
   name: z.string().min(3, "Ürün adı en az 3 karakter olmalıdır."),
   description: z.string().optional(),
@@ -19,11 +18,6 @@ const productSchema = z.object({
   barcode: z.string().optional(),
 });
 
-/**
- * GET: Ürünleri listeler.
- * Kategoriye veya arama terimine göre filtrelenebilir.
- * Herkese açık bir uç noktadır.
- */
 export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
@@ -32,18 +26,15 @@ export async function GET(req: Request) {
 
     const products = await prisma.product.findMany({
       where: {
-        // Arama sorgusu varsa ürün adı veya açıklamasında ara
         ...(query && {
           OR: [
             { name: { contains: query, mode: "insensitive" } },
             { description: { contains: query, mode: "insensitive" } },
           ],
         }),
-        // Kategori ID'si varsa ona göre filtrele
         ...(categoryId && { categoryId }),
       },
       include: {
-        // İlişkili kategori bilgisini de getir
         category: true,
       },
       orderBy: {
@@ -58,16 +49,11 @@ export async function GET(req: Request) {
   }
 }
 
-/**
- * POST: Yeni bir ürün oluşturur.
- * Sadece 'ADMIN' ve 'STAFF' rollerindeki kullanıcılar tarafından erişilebilir.
- */
 export async function POST(req: Request) {
   try {
     const session = await getServerSession(authOptions);
-    const userRole = (session?.user as any)?.role;
 
-    if (!session?.user || !["ADMIN", "STAFF"].includes(userRole)) {
+    if (!session?.user?.id || !["ADMIN", "STAFF"].includes(session.user.role)) {
       return new NextResponse("Unauthorized", { status: 401 });
     }
 
@@ -78,20 +64,7 @@ export async function POST(req: Request) {
       return new NextResponse(validation.error.message, { status: 400 });
     }
 
-    const { name, description, price, stock, categoryId, images, barcode } =
-      validation.data;
-
-    const product = await prisma.product.create({
-      data: {
-        name,
-        description,
-        price,
-        stock,
-        categoryId,
-        images,
-        barcode,
-      },
-    });
+    const product = await prisma.product.create({ data: validation.data });
 
     return NextResponse.json(product, { status: 201 });
   } catch (error) {

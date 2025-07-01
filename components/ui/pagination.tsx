@@ -1,11 +1,11 @@
 // components/ui/pagination.tsx
+// components/ui/pagination.tsx
 "use client";
 
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { usePathname, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
-import { Button } from "./button";
 
 export default function Pagination({ totalPages }: { totalPages: number }) {
   const pathname = usePathname();

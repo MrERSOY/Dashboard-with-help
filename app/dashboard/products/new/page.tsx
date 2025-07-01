@@ -1,4 +1,5 @@
 // app/dashboard/products/new/page.tsx
+// app/dashboard/products/new/page.tsx
 "use client";
 
 import { useState, useEffect } from "react";
@@ -16,7 +17,6 @@ import { Textarea } from "@/components/ui/textarea";
 import {
   Form,
   FormControl,
-  FormDescription,
   FormField,
   FormItem,
   FormLabel,

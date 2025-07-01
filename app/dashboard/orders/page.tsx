@@ -2,9 +2,7 @@
 
 import Link from "next/link";
 import prisma from "@/lib/prisma";
-import { format } from "date-fns";
-import { tr } from "date-fns/locale";
-import { Prisma, OrderStatus } from "@prisma/client"; // Prisma'dan tipleri import ediyoruz
+import { Prisma, OrderStatus } from "@prisma/client";
 
 import {
   Table,
@@ -16,9 +14,10 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+// DÜZELTME: Tüm formatlama işlemleri için merkezi yardımcı fonksiyonlarımızı import ediyoruz.
+import { formatCurrency, formatDateTime } from "@/lib/formatters";
 
-// Prisma'dan gelen verinin tipini güvenli bir şekilde tanımlıyoruz.
-// Bu, 'include' ile eklediğimiz 'user' ve 'items' verilerini de içerir.
+// Prisma'dan gelen verinin tipini, ilişkili alanları da içerecek şekilde güvenle tanımlıyoruz.
 const orderWithDetails = Prisma.validator<Prisma.OrderDefaultArgs>()({
   include: {
     user: { select: { name: true, email: true } },
@@ -105,19 +104,13 @@ export default async function OrdersPage() {
                       {order.id.substring(0, 8)}...
                     </TableCell>
                     <TableCell className="font-medium">
-                      {/* DÜZELTME: order.user nesnesinin varlığını kontrol et */}
                       {order.user?.name ||
                         order.user?.email ||
                         "Bilinmeyen Kullanıcı"}
                     </TableCell>
                     <TableCell>
-                      {format(
-                        new Date(order.createdAt),
-                        "dd MMMM yyyy, HH:mm",
-                        {
-                          locale: tr,
-                        }
-                      )}
+                      {/* DÜZELTME: Artık yeni ve güvenli formatDateTime fonksiyonumuzu kullanıyoruz. */}
+                      {formatDateTime(order.createdAt)}
                     </TableCell>
                     <TableCell>
                       <Badge
@@ -128,12 +121,7 @@ export default async function OrdersPage() {
                       </Badge>
                     </TableCell>
                     <TableCell className="text-right font-semibold">
-                      {/* DÜZELTME: order.total değerinin bir sayı olup olmadığını kontrol et */}
-                      {typeof order.total === "number"
-                        ? `₺${order.total.toLocaleString("tr-TR", {
-                            minimumFractionDigits: 2,
-                          })}`
-                        : "N/A"}
+                      {formatCurrency(order.total)}
                     </TableCell>
                     <TableCell className="text-right">
                       <Button asChild variant="outline" size="sm">

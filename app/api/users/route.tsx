@@ -1,10 +1,9 @@
 // app/api/users/route.ts
 import { NextResponse } from "next/server";
-import prisma from "@/lib/prisma"; // Prisma istemcisini import ediyoruz
+import prisma from "@/lib/prisma";
 
-export async function GET(request: Request) {
+export async function GET() {
   try {
-    // Prisma kullanarak tüm kullanıcıları bul ve şifre alanını DAHİL ETME
     const users = await prisma.user.findMany({
       select: {
         id: true,
@@ -12,15 +11,12 @@ export async function GET(request: Request) {
         email: true,
         image: true,
         role: true,
-        status: true,
         createdAt: true,
-        // 'password' alanını burada belirtmeyerek sonuçtan çıkarmış oluyoruz.
       },
       orderBy: {
-        createdAt: "desc", // En yeni kullanıcılar üstte
+        createdAt: "desc",
       },
     });
-
     return NextResponse.json(users);
   } catch (error) {
     console.error("Get Users API error:", error);

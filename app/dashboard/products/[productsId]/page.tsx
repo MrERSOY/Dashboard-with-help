@@ -1,78 +1,101 @@
 // app/api/products/[productId]/route.ts
 import { NextResponse } from "next/server";
+import { getServerSession } from "next-auth/next";
+import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 import prisma from "@/lib/prisma";
 import { z } from "zod";
+import { Prisma } from "@prisma/client";
 
-// Güncelleme için Zod şeması (tüm alanlar opsiyonel)
 const productUpdateSchema = z.object({
-  name: z.string().min(3).optional(),
+  name: z.string().min(3, "Ürün adı en az 3 karakter olmalıdır.").optional(),
   description: z.string().optional(),
-  category: z.string().optional(),
-  price: z.number().min(0).optional(),
-  stock: z.number().int().min(0).optional(),
-  barcode: z.string().min(1).optional(),
-  image_url: z.string().url().nullable().optional(),
+  price: z.coerce.number().min(0, "Fiyat 0'dan küçük olamaz.").optional(),
+  stock: z.coerce.number().int("Stok tam sayı olmalıdır.").optional(),
+  categoryId: z.string().cuid("Geçersiz kategori ID'si.").optional(),
+  images: z
+    .array(z.string().url("Geçersiz resim URL'i."))
+    .min(1, "En az bir resim eklenmelidir.")
+    .optional(),
+  barcode: z.string().optional(),
 });
 
-// Tek bir ürünü getiren GET fonksiyonu
 export async function GET(
   req: Request,
   { params }: { params: { productId: string } }
 ) {
   try {
+    if (!params.productId) {
+      return new NextResponse("Product ID is required", { status: 400 });
+    }
     const product = await prisma.product.findUnique({
       where: { id: params.productId },
+      include: { category: true },
     });
-
     if (!product) {
-      return NextResponse.json({ error: "Ürün bulunamadı." }, { status: 404 });
+      return new NextResponse("Product not found", { status: 404 });
     }
     return NextResponse.json(product);
   } catch (error) {
     console.error(`GET /api/products/${params.productId} error:`, error);
-    return NextResponse.json({ error: "Sunucu hatası." }, { status: 500 });
+    return new NextResponse("Internal error", { status: 500 });
   }
 }
 
-// Bir ürünü güncelleyen PATCH fonksiyonu
 export async function PATCH(
   req: Request,
   { params }: { params: { productId: string } }
 ) {
   try {
+    const session = await getServerSession(authOptions);
+    if (!session?.user?.id || !["ADMIN", "STAFF"].includes(session.user.role)) {
+      return new NextResponse("Unauthorized", { status: 401 });
+    }
+    if (!params.productId) {
+      return new NextResponse("Product ID is required", { status: 400 });
+    }
     const body = await req.json();
     const validation = productUpdateSchema.safeParse(body);
-
     if (!validation.success) {
-      return NextResponse.json(
-        { error: "Geçersiz veri", details: validation.error.flatten() },
-        { status: 400 }
-      );
+      return new NextResponse(validation.error.message, { status: 400 });
     }
-
     const product = await prisma.product.update({
       where: { id: params.productId },
-      data: { ...validation.data, updatedAt: new Date() },
+      data: validation.data,
     });
     return NextResponse.json(product);
   } catch (error) {
     console.error(`PATCH /api/products/${params.productId} error:`, error);
-    return NextResponse.json({ error: "Güncelleme hatası." }, { status: 500 });
+    return new NextResponse("Internal error", { status: 500 });
   }
 }
 
-// Bir ürünü silen DELETE fonksiyonu
 export async function DELETE(
   req: Request,
   { params }: { params: { productId: string } }
 ) {
   try {
-    await prisma.product.delete({
+    const session = await getServerSession(authOptions);
+    if (!session?.user?.id || session.user.role !== "ADMIN") {
+      return new NextResponse("Unauthorized: Admins only", { status: 401 });
+    }
+    if (!params.productId) {
+      return new NextResponse("Product ID is required", { status: 400 });
+    }
+    await prisma.orderItem.deleteMany({
+      where: { productId: params.productId },
+    });
+    const product = await prisma.product.delete({
       where: { id: params.productId },
     });
-    return new NextResponse(null, { status: 204 }); // Başarılı, içerik yok
+    return NextResponse.json(product);
   } catch (error) {
     console.error(`DELETE /api/products/${params.productId} error:`, error);
-    return NextResponse.json({ error: "Silme hatası." }, { status: 500 });
+    if (
+      error instanceof Prisma.PrismaClientKnownRequestError &&
+      error.code === "P2025"
+    ) {
+      return new NextResponse("Silinecek ürün bulunamadı.", { status: 404 });
+    }
+    return new NextResponse("Internal error", { status: 500 });
   }
 }
