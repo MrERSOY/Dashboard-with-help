@@ -2,7 +2,7 @@
 
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth/next";
-import { authOptions } from "@/app/api/auth/[...nextauth]/route";
+import { authOptions } from "@/lib/auth";
 import prisma from "@/lib/prisma";
 import { z } from "zod";
 import { OrderStatus, Prisma } from "@prisma/client";
@@ -13,14 +13,15 @@ const statusUpdateSchema = z.object({
 
 export async function PATCH(
   req: Request,
-  { params }: { params: { orderId: string } }
+  { params }: { params: Promise<{ orderId: string }> }
 ) {
+  const { orderId } = await params;
   try {
     const session = await getServerSession(authOptions);
     if (!session?.user?.id || !["ADMIN", "STAFF"].includes(session.user.role)) {
       return new NextResponse("Unauthorized", { status: 401 });
     }
-    if (!params.orderId) {
+    if (!orderId) {
       return new NextResponse("Order ID is required", { status: 400 });
     }
     const body = await req.json();
@@ -29,7 +30,7 @@ export async function PATCH(
       return new NextResponse(validation.error.message, { status: 400 });
     }
     const updatedOrder = await prisma.order.update({
-      where: { id: params.orderId },
+      where: { id: orderId },
       data: { status: validation.data.status },
     });
     return NextResponse.json(updatedOrder);

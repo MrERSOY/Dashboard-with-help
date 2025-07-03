@@ -1,51 +1,60 @@
-// app/api/users/[userId]/route.ts
-import { NextResponse } from "next/server";
-import { getServerSession } from "next-auth/next";
-import { authOptions } from "@/app/api/auth/[...nextauth]/route";
-import prisma from "@/lib/prisma";
-import { z } from "zod";
-import { UserRole, Prisma } from "@prisma/client";
+// Dosya: app/api/users/[userId]/route.ts
+import {
+  type NextRequest as NextRequestUserId,
+  NextResponse as NextResponseUserId,
+} from "next/server";
+import { getServerSession as getServerSessionUserId } from "next-auth/next";
+import { authOptions as authOptionsUserId } from "@/lib/auth";
+import prismaUserId from "@/lib/prisma";
+import { z as zUserId } from "zod";
+import {
+  UserRole as UserRoleUserId,
+  Prisma as PrismaUserId,
+} from "@prisma/client";
 
-const userUpdateSchema = z.object({
-  role: z.nativeEnum(UserRole),
+const userUpdateSchemaUserId = zUserId.object({
+  role: zUserId.nativeEnum(UserRoleUserId),
 });
 
 export async function PATCH(
-  req: Request,
-  { params }: { params: { userId: string } }
+  req: NextRequestUserId,
+  { params }: { params: Promise<{ userId: string }> }
 ) {
+  const { userId } = await params;
   try {
-    const session = await getServerSession(authOptions);
+    const session = await getServerSessionUserId(authOptionsUserId);
     if (!session?.user || session.user.role !== "ADMIN") {
-      return new NextResponse("Unauthorized: Admins only", { status: 401 });
+      return new NextResponseUserId("Unauthorized: Admins only", {
+        status: 401,
+      });
     }
-    if (!params.userId) {
-      return new NextResponse("User ID is required", { status: 400 });
+    if (!userId) {
+      return new NextResponseUserId("User ID is required", { status: 400 });
     }
-    if (session.user.id === params.userId) {
-      return new NextResponse("Admin cannot change their own role.", {
+    if (session.user.id === userId) {
+      return new NextResponseUserId("Admin cannot change their own role.", {
         status: 403,
       });
     }
     const body = await req.json();
-    const validation = userUpdateSchema.safeParse(body);
+    const validation = userUpdateSchemaUserId.safeParse(body);
     if (!validation.success) {
-      return new NextResponse(validation.error.message, { status: 400 });
+      return new NextResponseUserId(validation.error.message, { status: 400 });
     }
-    const updatedUser = await prisma.user.update({
-      where: { id: params.userId },
+    const updatedUser = await prismaUserId.user.update({
+      where: { id: userId },
       data: { role: validation.data.role },
       select: { id: true, name: true, email: true, role: true, image: true },
     });
-    return NextResponse.json(updatedUser);
+    return NextResponseUserId.json(updatedUser);
   } catch (error) {
     console.error("[USER_PATCH]", error);
     if (
-      error instanceof Prisma.PrismaClientKnownRequestError &&
+      error instanceof PrismaUserId.PrismaClientKnownRequestError &&
       error.code === "P2025"
     ) {
-      return new NextResponse("User not found", { status: 404 });
+      return new NextResponseUserId("User not found", { status: 404 });
     }
-    return new NextResponse("Internal error", { status: 500 });
+    return new NextResponseUserId("Internal error", { status: 500 });
   }
 }

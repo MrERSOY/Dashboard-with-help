@@ -1,5 +1,3 @@
-// app/dashboard/orders/[orderId]/page.tsx
-
 import Link from "next/link";
 import prisma from "@/lib/prisma";
 import { notFound } from "next/navigation";
@@ -19,8 +17,8 @@ import { User, Calendar, Truck, MapPin, Hash, ShoppingBag } from "lucide-react";
 import { formatCurrency, formatDateTime } from "@/lib/formatters";
 import { OrderStatusUpdater } from "@/components/admin/OrderStatusUpdater";
 
-// Prisma'dan gelen verinin tipini, ilişkili tüm alanları içerecek şekilde güvenle tanımlıyoruz.
-const orderWithDetails = Prisma.validator<Prisma.OrderDefaultArgs>()({
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+const _orderWithDetails = Prisma.validator<Prisma.OrderDefaultArgs>()({
   include: {
     user: true,
     items: {
@@ -32,9 +30,8 @@ const orderWithDetails = Prisma.validator<Prisma.OrderDefaultArgs>()({
   },
 });
 
-type OrderWithDetails = Prisma.OrderGetPayload<typeof orderWithDetails>;
+type OrderWithDetails = Prisma.OrderGetPayload<typeof _orderWithDetails>;
 
-// Sipariş durumlarına göre stil belirleyen yardımcı fonksiyon
 const getStatusBadgeVariant = (status: OrderStatus) => {
   switch (status) {
     case "PAID":
@@ -50,7 +47,6 @@ const getStatusBadgeVariant = (status: OrderStatus) => {
   }
 };
 
-// Enum değerlerini okunabilir etiketlere çeviren nesne
 const statusLabels: { [key in OrderStatus]: string } = {
   PENDING: "Beklemede",
   PAID: "Ödendi",
@@ -62,10 +58,12 @@ const statusLabels: { [key in OrderStatus]: string } = {
 export default async function OrderDetailPage({
   params,
 }: {
-  params: { orderId: string };
+  params: Promise<{ orderId: string }>;
 }) {
+  const { orderId } = await params;
+
   const order: OrderWithDetails | null = await prisma.order.findUnique({
-    where: { id: params.orderId },
+    where: { id: orderId },
     include: {
       user: true,
       items: {
@@ -94,7 +92,6 @@ export default async function OrderDetailPage({
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        {/* Sol Taraf: Sipariş Bilgileri ve Ürünler */}
         <div className="lg:col-span-2 space-y-8">
           <Card>
             <CardHeader>
@@ -133,7 +130,6 @@ export default async function OrderDetailPage({
           </Card>
         </div>
 
-        {/* Sağ Taraf: Özet Bilgiler */}
         <div className="space-y-8">
           <Card>
             <CardHeader>
@@ -172,7 +168,6 @@ export default async function OrderDetailPage({
             </CardContent>
           </Card>
 
-          {/* İnteraktif durum güncelleme kartı */}
           <Card>
             <CardHeader>
               <CardTitle>Durumu Güncelle</CardTitle>
@@ -193,13 +188,13 @@ export default async function OrderDetailPage({
               <div className="flex items-center gap-2">
                 <User className="w-4 h-4 text-muted-foreground" />
                 <span className="font-medium">
-                  {order.user.name || "İsimsiz Kullanıcı"}
+                  {order.user?.name || "İsimsiz Kullanıcı"}
                 </span>
               </div>
               <div className="flex items-center gap-2">
                 <MapPin className="w-4 h-4 text-muted-foreground" />
                 <span className="text-muted-foreground">
-                  {order.user.email}
+                  {order.user?.email || "E-posta yok"}
                 </span>
               </div>
             </CardContent>

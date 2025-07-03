@@ -2,12 +2,16 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { BrowserMultiFormatReader, NotFoundException } from "@zxing/library";
+import {
+  BrowserMultiFormatReader,
+  NotFoundException,
+  Exception, // Hata tipi için import eklendi
+} from "@zxing/library";
 import { ScanLine } from "lucide-react";
 
 interface BarcodeScannerProps {
   onScanSuccess: (text: string) => void;
-  onScanError?: (error: any) => void;
+  onScanError?: (error: Error) => void; // DÜZELTME: 'any' yerine 'Error' tipi kullanıldı
 }
 
 export function BarcodeScanner({
@@ -28,7 +32,6 @@ export function BarcodeScanner({
           throw new Error("Kamera bulunamadı.");
         }
 
-        // Genellikle arka kamerayı tercih etmeye çalışır
         const rearCamera =
           videoInputDevices.find((device) =>
             device.label.toLowerCase().includes("back")
@@ -40,30 +43,37 @@ export function BarcodeScanner({
         await codeReader.decodeFromVideoDevice(
           selectedDeviceId,
           videoRef.current!,
-          (result, err) => {
+          (result, err: Exception | undefined) => {
+            // DÜZELTME: Hata parametresine tip eklendi
             if (result) {
               setStatus("Barkod bulundu!");
               onScanSuccess(result.getText());
-              codeReader.reset(); // Tarayıcıyı durdur
+              codeReader.reset();
             }
             if (err && !(err instanceof NotFoundException)) {
               setStatus("Tarama hatası: Lütfen tekrar deneyin.");
-              if (onScanError) onScanError(err);
+              if (onScanError) {
+                // Kütüphanenin özel Exception tipini standart Error tipine çeviriyoruz.
+                onScanError(new Error(err.message));
+              }
             }
           }
         );
       } catch (error) {
-        console.error("Kamera başlatma hatası:", error);
+        const err =
+          error instanceof Error
+            ? error
+            : new Error("Bilinmeyen bir kamera hatası oluştu.");
+        console.error("Kamera başlatma hatası:", err);
         setStatus(
           "Kamera erişiminde hata oluştu. Lütfen izinleri kontrol edin."
         );
-        if (onScanError) onScanError(error);
+        if (onScanError) onScanError(err);
       }
     };
 
     startScanner();
 
-    // Bileşen DOM'dan kaldırıldığında kamerayı serbest bırak
     return () => {
       codeReader.reset();
     };
@@ -86,14 +96,3 @@ export function BarcodeScanner({
     </div>
   );
 }
-
-// Bu animasyonu globals.css dosyanıza ekleyebilirsiniz.
-/*
-@keyframes scan-anim {
-  0% { transform: translateY(0%); }
-  100% { transform: translateY(100%); }
-}
-.animate-scan {
-  animation: scan-anim 3s linear infinite;
-}
-*/

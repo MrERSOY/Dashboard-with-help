@@ -24,13 +24,11 @@ const ITEMS_PER_PAGE = 10;
 export default async function ProductsPage({
   searchParams,
 }: {
-  searchParams?: {
-    query?: string;
-    page?: string;
-  };
+  searchParams?: Promise<{ query?: string; page?: string }>;
 }) {
-  const query = searchParams?.query || "";
-  const currentPage = Number(searchParams?.page) || 1;
+  const resolvedSearchParams = searchParams ? await searchParams : {};
+  const query = resolvedSearchParams.query || "";
+  const currentPage = Number(resolvedSearchParams.page) || 1;
 
   // Prisma için arama ve filtreleme koşulunu oluştur
   const whereCondition: Prisma.ProductWhereInput = query
@@ -94,7 +92,7 @@ export default async function ProductsPage({
                     <TableCell>
                       <Image
                         src={
-                          product.images[0] ||
+                          product.images?.[0] ||
                           "https://placehold.co/40x40/e2e8f0/94a3b8?text=G%C3%B6rsel"
                         }
                         alt={product.name}

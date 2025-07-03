@@ -1,47 +1,59 @@
-// app/dashboard/team/page.tsx
-"use client"; // State yönetimi (arama, sayfalama) için Client Component
+// app/dashboard/users/page.tsx
+"use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect } from "react";
+import { useSession } from "next-auth/react";
 import Image from "next/image";
-import { MailPlus, Search, ChevronLeft, ChevronRight } from "lucide-react";
+import { toast, Toaster } from "sonner";
+import { UserRole } from "@prisma/client";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Badge } from "@/components/ui/badge";
 
 // Veritabanından gelen kullanıcı tipi
 interface User {
   id: string;
   name: string | null;
   email: string | null;
-  role: string | null;
-  status: string | null;
-  image?: string | null; // Prisma şemasındaki 'image' alanı
+  role: UserRole;
+  image: string | null;
 }
 
-export default function TeamPage() {
-  const [allUsers, setAllUsers] = useState<User[]>([]);
+export default function UsersPage() {
+  const { data: session } = useSession();
+  const [users, setUsers] = useState<User[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [selectedUser, setSelectedUser] = useState<User | null>(null);
+  const [newRole, setNewRole] = useState<UserRole | "">("");
+  const [isUpdating, setIsUpdating] = useState(false);
 
-  const [searchTerm, setSearchTerm] = useState("");
-  const [currentPage, setCurrentPage] = useState(1);
-  const ITEMS_PER_PAGE = 8;
-
-  // Prisma tabanlı API'den kullanıcıları çekmek için useEffect
+  // Veritabanından kullanıcıları çek
   useEffect(() => {
     async function fetchUsers() {
       setIsLoading(true);
-      setError(null);
       try {
         const response = await fetch("/api/users");
-        if (!response.ok) throw new Error("API'den kullanıcılar çekilemedi");
-
-        const usersData = await response.json();
-        setAllUsers(usersData || []);
-      } catch (err) {
-        setError(
-          err instanceof Error
-            ? err.message
-            : "Kullanıcılar yüklenirken bir hata oluştu."
+        if (!response.ok) throw new Error("Kullanıcılar yüklenemedi.");
+        const data = await response.json();
+        setUsers(data);
+      } catch (error) {
+        toast.error(
+          error instanceof Error ? error.message : "Bilinmeyen bir hata oluştu."
         );
       } finally {
         setIsLoading(false);
@@ -50,147 +62,181 @@ export default function TeamPage() {
     fetchUsers();
   }, []);
 
-  // Arama ve sayfalama mantığı
-  const filteredUsers = useMemo(() => {
-    if (!searchTerm) return allUsers;
-    return allUsers.filter(
-      (user) =>
-        user.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        user.email?.toLowerCase().includes(searchTerm.toLowerCase())
-    );
-  }, [allUsers, searchTerm]);
+  const handleOpenModal = (user: User) => {
+    setSelectedUser(user);
+    setNewRole(user.role);
+  };
 
-  const paginatedUsers = useMemo(() => {
-    const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
-    return filteredUsers.slice(startIndex, startIndex + ITEMS_PER_PAGE);
-  }, [filteredUsers, currentPage]);
+  const handleCloseModal = () => {
+    if (isUpdating) return;
+    setSelectedUser(null);
+    setNewRole("");
+  };
 
-  const totalPages = Math.ceil(filteredUsers.length / ITEMS_PER_PAGE);
+  const handleRoleChange = async () => {
+    if (!selectedUser || !newRole) return;
+    setIsUpdating(true);
+    const promise = fetch(`/api/users/${selectedUser.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ role: newRole }),
+    }).then(async (res) => {
+      if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData.error || "Rol güncellenemedi.");
+      }
+      return res.json();
+    });
+
+    toast.promise(promise, {
+      loading: "Rol güncelleniyor...",
+      success: (updatedUser: User) => {
+        setUsers((currentUsers) =>
+          currentUsers.map((u) => (u.id === updatedUser.id ? updatedUser : u))
+        );
+        handleCloseModal();
+        return `${
+          updatedUser.name || "Kullanıcının"
+        } rolü başarıyla güncellendi.`;
+      },
+      error: (err: Error) => err.message,
+      finally: () => setIsUpdating(false),
+    });
+  };
+
+  const loggedInUser = session?.user;
+  const isAdmin = loggedInUser?.role === "ADMIN";
+
+  const roleLabels: Record<UserRole, string> = {
+    ADMIN: "Yönetici",
+    STAFF: "Personel",
+    CUSTOMER: "Müşteri",
+  };
+
+  const roleColors: Record<UserRole, string> = {
+    ADMIN: "bg-red-100 text-red-800 border-red-200",
+    STAFF: "bg-blue-100 text-blue-800 border-blue-200",
+    CUSTOMER: "bg-gray-100 text-gray-800 border-gray-200",
+  };
 
   return (
-    <div>
-      <div className="flex flex-col sm:flex-row justify-between items-center gap-4 mb-6">
-        <h1 className="text-3xl font-bold">Kullanıcı Yönetimi</h1>
-        <div className="w-full sm:w-auto flex flex-col sm:flex-row items-center gap-2">
-          <div className="relative w-full sm:w-auto">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input
-              type="search"
-              placeholder="İsim veya e-posta ara..."
-              className="pl-9 w-full sm:w-64"
-              value={searchTerm}
-              onChange={(e) => {
-                setSearchTerm(e.target.value);
-                setCurrentPage(1);
-              }}
-            />
-          </div>
-          <Button className="whitespace-nowrap w-full sm:w-auto">
-            <MailPlus size={18} className="mr-2" />
-            Yeni Kullanıcı Davet Et
-          </Button>
-        </div>
-      </div>
-      <p className="text-muted-foreground mb-8">
-        Ekip üyelerini görüntüleyin, rollerini ve izinlerini yönetin.
-      </p>
+    <>
+      <Toaster richColors position="top-right" />
+      <div>
+        <h1 className="text-3xl font-bold mb-2">Kullanıcı Yönetimi</h1>
+        <p className="text-muted-foreground mb-8">
+          Ekip üyelerini görüntüleyin ve rollerini düzenleyin.
+        </p>
 
-      <div className="bg-card rounded-lg shadow-md border overflow-hidden">
-        {isLoading ? (
-          <p className="text-center p-8 text-muted-foreground">
-            Kullanıcılar yükleniyor...
-          </p>
-        ) : error ? (
-          <p className="text-center p-8 text-destructive">{error}</p>
-        ) : paginatedUsers.length > 0 ? (
-          <>
+        <div className="bg-card rounded-lg shadow-md border overflow-hidden">
+          {isLoading ? (
+            <div className="p-4 space-y-4">
+              {[...Array(5)].map((_, i) => (
+                <div key={i} className="flex items-center gap-4 p-2">
+                  <Skeleton className="h-10 w-10 rounded-full" />
+                  <div className="flex-1 space-y-2">
+                    <Skeleton className="h-4 w-1/3" />
+                    <Skeleton className="h-4 w-2/3" />
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
             <ul className="divide-y divide-border">
-              {paginatedUsers.map((member) => (
+              {users.map((user) => (
                 <li
-                  key={member.id}
-                  className="p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 hover:bg-muted/50"
+                  key={user.id}
+                  className="p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4"
                 >
                   <div className="flex items-center gap-4">
                     <Image
+                      // DÜZELTME: Profil fotoğrafı veya isim null (boş) olsa bile
+                      // hata vermeyecek daha güvenli bir yapı kullanıldı.
                       src={
-                        member.image ||
-                        `/images/avatars/avatar-${
-                          (parseInt(member.id.slice(-1), 16) % 5) + 1
-                        }.png`
+                        user.image ||
+                        `https://placehold.co/40x40/e2e8f0/94a3b8?text=${(
+                          user.name || "U"
+                        )
+                          .charAt(0)
+                          .toUpperCase()}`
                       }
-                      alt={member.name || "Avatar"}
+                      alt={user.name || "Kullanıcı Avatarı"}
                       width={40}
                       height={40}
-                      className="rounded-full"
-                      onError={(e) => {
-                        (e.target as HTMLImageElement).src =
-                          "/images/avatars/default.png";
-                      }}
+                      className="rounded-full bg-muted"
                     />
                     <div>
                       <p className="text-sm font-semibold text-foreground">
-                        {member.name}
+                        {user.name || "İsimsiz Kullanıcı"}
                       </p>
                       <p className="text-sm text-muted-foreground">
-                        {member.email}
+                        {user.email || "E-posta yok"}
                       </p>
                     </div>
                   </div>
                   <div className="flex items-center gap-4 w-full sm:w-auto justify-end">
-                    <p className="text-sm text-muted-foreground w-20 text-center capitalize">
-                      {member.role}
-                    </p>
-                    <span
-                      className={`px-2 py-0.5 inline-flex text-xs leading-5 font-semibold rounded-full ${
-                        member.status === "active"
-                          ? "bg-green-100 text-green-800"
-                          : "bg-gray-100 text-gray-800"
-                      }`}
-                    >
-                      {member.status}
-                    </span>
-                    <Button variant="ghost" size="sm">
-                      Düzenle
-                    </Button>
+                    <Badge variant="outline" className={roleColors[user.role]}>
+                      {roleLabels[user.role]}
+                    </Badge>
+                    {isAdmin && loggedInUser?.id !== user.id && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleOpenModal(user)}
+                      >
+                        Rolü Düzenle
+                      </Button>
+                    )}
                   </div>
                 </li>
               ))}
             </ul>
-            {/* Sayfalama Kontrolleri */}
-            <div className="flex items-center justify-center p-4 border-t">
-              <div className="flex items-center gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() =>
-                    setCurrentPage((prev) => Math.max(prev - 1, 1))
-                  }
-                  disabled={currentPage === 1}
-                >
-                  <ChevronLeft className="h-4 w-4" />{" "}
-                </Button>
-                <span className="text-sm text-muted-foreground">
-                  Sayfa {currentPage} / {totalPages}
-                </span>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() =>
-                    setCurrentPage((prev) => Math.min(prev + 1, totalPages))
-                  }
-                  disabled={currentPage === totalPages}
-                >
-                  <ChevronRight className="h-4 w-4" />
-                </Button>
-              </div>
-            </div>
-          </>
-        ) : (
-          <p className="text-center p-8 text-muted-foreground">
-            Veritabanında hiç kullanıcı bulunamadı.
-          </p>
-        )}
+          )}
+        </div>
       </div>
-    </div>
+
+      <Dialog open={!!selectedUser} onOpenChange={handleCloseModal}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              {selectedUser?.name || "Kullanıcının"} rolünü düzenle
+            </DialogTitle>
+            <DialogDescription>
+              Bu kullanıcıya yeni bir rol atayarak yetkilerini
+              değiştirebilirsiniz.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            <Select
+              value={newRole || ""}
+              onValueChange={(value) => setNewRole(value as UserRole)}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Bir rol seçin" />
+              </SelectTrigger>
+              <SelectContent>
+                {Object.values(UserRole).map((role) => (
+                  <SelectItem key={role} value={role}>
+                    {roleLabels[role]}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={handleCloseModal}
+              disabled={isUpdating}
+            >
+              İptal
+            </Button>
+            <Button onClick={handleRoleChange} disabled={isUpdating}>
+              {isUpdating ? "Kaydediliyor..." : "Kaydet"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }

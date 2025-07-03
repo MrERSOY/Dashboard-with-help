@@ -2,40 +2,20 @@
 "use client";
 
 import * as React from "react";
-import { Slot } from "@radix-ui/react-slot";
-import { cva, VariantProps } from "class-variance-authority";
-// PanelLeftIcon yerine yeni ok ikonlarını import ediyoruz
-import { ChevronLeft, ChevronRight } from "lucide-react";
-
+import * as SheetPrimitive from "@radix-ui/react-dialog";
+import { ChevronLeft, ChevronRight, X } from "lucide-react";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { cn } from "@/lib/utils";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Separator } from "@/components/ui/separator";
+import { Button, type ButtonProps } from "@/components/ui/button";
 import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetHeader,
-  SheetTitle,
-} from "@/components/ui/sheet";
-import { Skeleton } from "@/components/ui/skeleton";
-import {
-  Tooltip,
-  TooltipContent,
   TooltipProvider,
+  Tooltip,
   TooltipTrigger,
+  TooltipContent,
 } from "@/components/ui/tooltip";
 
-// ... (dosyanın geri kalanındaki SidebarProvider, Sidebar, useSidebar vb. tüm fonksiyonlar aynı kalacak)
-// ... (Tüm dosya içeriği burada, sadece SidebarTrigger fonksiyonunu aşağıda değiştiriyoruz)
-
 const SIDEBAR_COOKIE_NAME = "sidebar_state";
-const SIDEBAR_COOKIE_MAX_AGE = 60 * 60 * 24 * 7;
-const SIDEBAR_WIDTH = "16rem";
-const SIDEBAR_WIDTH_MOBILE = "18rem";
-const SIDEBAR_WIDTH_ICON = "3rem";
-const SIDEBAR_KEYBOARD_SHORTCUT = "b";
+const SIDEBAR_COOKIE_MAX_AGE = 60 * 60 * 24 * 7; // 7 gün
 
 type SidebarContextProps = {
   state: "expanded" | "collapsed";
@@ -49,7 +29,7 @@ type SidebarContextProps = {
 
 const SidebarContext = React.createContext<SidebarContextProps | null>(null);
 
-function useSidebar() {
+export function useSidebar() {
   const context = React.useContext(SidebarContext);
   if (!context) {
     throw new Error("useSidebar must be used within a SidebarProvider.");
@@ -57,52 +37,27 @@ function useSidebar() {
   return context;
 }
 
-function SidebarProvider({
+export function SidebarProvider({
   defaultOpen = true,
-  open: openProp,
-  onOpenChange: setOpenProp,
-  className,
-  style,
   children,
   ...props
-}: React.ComponentProps<"div"> & {
-  defaultOpen?: boolean;
-  open?: boolean;
-  onOpenChange?: (open: boolean) => void;
-}) {
+}: React.ComponentProps<"div"> & { defaultOpen?: boolean }) {
   const isMobile = useIsMobile();
   const [openMobile, setOpenMobile] = React.useState(false);
-  const [_open, _setOpen] = React.useState(defaultOpen);
-  const open = openProp ?? _open;
-  const setOpen = React.useCallback(
-    (value: boolean | ((value: boolean) => boolean)) => {
-      const openState = typeof value === "function" ? value(open) : value;
-      if (setOpenProp) {
-        setOpenProp(openState);
-      } else {
-        _setOpen(openState);
-      }
-      document.cookie = `${SIDEBAR_COOKIE_NAME}=${openState}; path=/; max-age=${SIDEBAR_COOKIE_MAX_AGE}`;
-    },
-    [setOpenProp, open]
-  );
-  const toggleSidebar = React.useCallback(() => {
-    return isMobile ? setOpenMobile((open) => !open) : setOpen((open) => !open);
-  }, [isMobile, setOpen, setOpenMobile]);
+  const [open, _setOpen] = React.useState(defaultOpen);
 
-  React.useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (
-        event.key === SIDEBAR_KEYBOARD_SHORTCUT &&
-        (event.metaKey || event.ctrlKey)
-      ) {
-        event.preventDefault();
-        toggleSidebar();
-      }
-    };
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [toggleSidebar]);
+  const setOpen = React.useCallback((value: boolean) => {
+    _setOpen(value);
+    document.cookie = `${SIDEBAR_COOKIE_NAME}=${value}; path=/; max-age=${SIDEBAR_COOKIE_MAX_AGE}`;
+  }, []);
+
+  const toggleSidebar = React.useCallback(() => {
+    if (isMobile) {
+      setOpenMobile((v) => !v);
+    } else {
+      setOpen(!open);
+    }
+  }, [isMobile, open, setOpen, setOpenMobile]);
 
   const state = open ? "expanded" : "collapsed";
 
@@ -123,18 +78,7 @@ function SidebarProvider({
     <SidebarContext.Provider value={contextValue}>
       <TooltipProvider delayDuration={0}>
         <div
-          data-slot="sidebar-wrapper"
-          style={
-            {
-              "--sidebar-width": SIDEBAR_WIDTH,
-              "--sidebar-width-icon": SIDEBAR_WIDTH_ICON,
-              ...style,
-            } as React.CSSProperties
-          }
-          className={cn(
-            "group/sidebar-wrapper has-data-[variant=inset]:bg-sidebar flex min-h-svh w-full",
-            className
-          )}
+          className={cn("group/sidebar-wrapper flex min-h-svh w-full")}
           {...props}
         >
           {children}
@@ -144,45 +88,188 @@ function SidebarProvider({
   );
 }
 
-// ... (Sidebar, SidebarRail, ve diğer tüm yardımcı bileşenler burada aynı şekilde kalacak)
-// ...
-
-// DEĞİŞTİRİLEN BÖLÜM BURASI
-function SidebarTrigger({
-  className,
-  onClick,
-  ...props
-}: React.ComponentProps<typeof Button>) {
-  const { toggleSidebar, state } = useSidebar();
+const Sidebar = React.forwardRef<
+  HTMLDivElement,
+  React.HTMLAttributes<HTMLDivElement>
+>(({ className, ...props }, ref) => {
+  const { state, openMobile, setOpenMobile } = useSidebar();
   const isCollapsed = state === "collapsed";
+  const isMobile = useIsMobile();
+
+  if (isMobile) {
+    return (
+      <SheetPrimitive.Root open={openMobile} onOpenChange={setOpenMobile}>
+        <SheetPrimitive.Content
+          className={cn("bg-background p-0 border-r w-64 flex flex-col")}
+        >
+          {props.children}
+          <SheetPrimitive.Close className="absolute right-4 top-4 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none data-[state=open]:bg-accent data-[state=open]:text-muted-foreground">
+            <X className="h-4 w-4" />
+            <span className="sr-only">Close</span>
+          </SheetPrimitive.Close>
+        </SheetPrimitive.Content>
+      </SheetPrimitive.Root>
+    );
+  }
 
   return (
-    <Button
-      data-sidebar="trigger"
-      data-slot="sidebar-trigger"
-      variant="ghost"
-      size="icon"
-      className={cn("size-7", className)}
-      onClick={(event) => {
-        onClick?.(event);
-        toggleSidebar();
-      }}
+    <aside
+      ref={ref}
+      className={cn(
+        "flex-col bg-background text-foreground p-4 space-y-2 hidden md:flex transition-all duration-300 ease-in-out",
+        isCollapsed ? "w-20" : "w-64",
+        className
+      )}
       {...props}
-    >
-      {/* Sidebar'ın durumuna göre ikonu değiştiriyoruz */}
-      {isCollapsed ? <ChevronRight /> : <ChevronLeft />}
-      <span className="sr-only">Toggle Sidebar</span>
-    </Button>
+    />
   );
+});
+Sidebar.displayName = "Sidebar";
+
+const SidebarHeader = React.forwardRef<
+  HTMLDivElement,
+  React.HTMLAttributes<HTMLDivElement>
+>(({ className, ...props }, ref) => {
+  const { isMobile } = useSidebar();
+  const baseClass = isMobile
+    ? "p-4"
+    : "px-2 py-2 text-xl font-bold flex items-center gap-2";
+  return <div ref={ref} className={cn(baseClass, className)} {...props} />;
+});
+SidebarHeader.displayName = "SidebarHeader";
+
+const SidebarContent = React.forwardRef<
+  HTMLDivElement,
+  React.HTMLAttributes<HTMLDivElement>
+>(({ className, ...props }, ref) => (
+  <div
+    ref={ref}
+    className={cn("flex-1 mt-2 space-y-1", className)}
+    {...props}
+  />
+));
+SidebarContent.displayName = "SidebarContent";
+
+const SidebarFooter = React.forwardRef<
+  HTMLDivElement,
+  React.HTMLAttributes<HTMLDivElement>
+>(({ className, ...props }, ref) => (
+  <div
+    ref={ref}
+    className={cn("mt-auto pt-4 border-t border-border space-y-1", className)}
+    {...props}
+  />
+));
+SidebarFooter.displayName = "SidebarFooter";
+
+export const SidebarGroup = React.forwardRef<
+  HTMLDivElement,
+  React.HTMLAttributes<HTMLDivElement>
+>(({ className, ...props }, ref) => (
+  <div ref={ref} className={cn("flex flex-col gap-2", className)} {...props} />
+));
+SidebarGroup.displayName = "SidebarGroup";
+
+export const SidebarGroupLabel = React.forwardRef<
+  HTMLHeadingElement,
+  React.HTMLAttributes<HTMLHeadingElement>
+>(({ className, ...props }, ref) => (
+  <h3
+    ref={ref}
+    className={cn(
+      "px-3 text-xs font-semibold uppercase text-muted-foreground tracking-wider",
+      className
+    )}
+    {...props}
+  />
+));
+SidebarGroupLabel.displayName = "SidebarGroupLabel";
+
+export const SidebarGroupContent = React.forwardRef<
+  HTMLDivElement,
+  React.HTMLAttributes<HTMLDivElement>
+>(({ className, ...props }, ref) => (
+  <div ref={ref} className={cn("flex flex-col gap-1", className)} {...props} />
+));
+SidebarGroupContent.displayName = "SidebarGroupContent";
+
+export const SidebarMenu = React.forwardRef<
+  HTMLDivElement,
+  React.HTMLAttributes<HTMLDivElement>
+>(({ className, ...props }, ref) => (
+  <div ref={ref} className={cn("flex flex-col gap-1", className)} {...props} />
+));
+SidebarMenu.displayName = "SidebarMenu";
+
+export const SidebarMenuItem = React.forwardRef<
+  HTMLDivElement,
+  React.HTMLAttributes<HTMLDivElement>
+>(({ className, ...props }, ref) => (
+  <div
+    ref={ref}
+    className={cn("relative flex items-center", className)}
+    {...props}
+  />
+));
+SidebarMenuItem.displayName = "SidebarMenuItem";
+
+// DÜZELTME: SidebarMenuButton artık 'tooltip' prop'u alabiliyor.
+export interface SidebarMenuButtonProps extends ButtonProps {
+  tooltip?: string;
 }
 
-// ... (dosyanın geri kalanı ve export'lar aynı kalacak)
-// ...
+export const SidebarMenuButton = React.forwardRef<
+  HTMLButtonElement,
+  SidebarMenuButtonProps
+>(({ className, tooltip, children, ...props }, ref) => {
+  const { state } = useSidebar();
+  const isCollapsed = state === "collapsed";
 
-export {
-  // ... (tüm diğer export'lar)
-  SidebarProvider,
-  SidebarTrigger,
-  useSidebar,
-  // ...
-};
+  const buttonElement = (
+    <Button
+      ref={ref}
+      variant="ghost"
+      className={cn("w-full justify-start", className)}
+      {...props}
+    >
+      {children}
+    </Button>
+  );
+
+  if (isCollapsed && tooltip) {
+    return (
+      <Tooltip>
+        <TooltipTrigger asChild>{buttonElement}</TooltipTrigger>
+        <TooltipContent side="right" sideOffset={5}>
+          <p>{tooltip}</p>
+        </TooltipContent>
+      </Tooltip>
+    );
+  }
+
+  return buttonElement;
+});
+SidebarMenuButton.displayName = "SidebarMenuButton";
+
+export const SidebarTrigger = React.forwardRef<HTMLButtonElement, ButtonProps>(
+  ({ className, ...props }, ref) => {
+    const { toggleSidebar, state } = useSidebar();
+    const isCollapsed = state === "collapsed";
+    return (
+      <Button
+        ref={ref}
+        variant="ghost"
+        size="icon"
+        className={cn("size-7", className)}
+        onClick={toggleSidebar}
+        {...props}
+      >
+        {isCollapsed ? <ChevronRight /> : <ChevronLeft />}
+        <span className="sr-only">Toggle Sidebar</span>
+      </Button>
+    );
+  }
+);
+SidebarTrigger.displayName = "SidebarTrigger";
+
+export { Sidebar, SidebarHeader, SidebarContent, SidebarFooter };

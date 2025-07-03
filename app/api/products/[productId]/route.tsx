@@ -1,102 +1,108 @@
-// app/api/products/[productId]/route.ts
+// Dosya: app/api/products/[productId]/route.ts
+import {
+  type NextRequest as NextRequestProdId,
+  NextResponse as NextResponseProdId,
+  NextRequest,
+} from "next/server";
+import { getServerSession as getServerSessionProdId } from "next-auth/next";
+import { authOptions as authOptionsProdId } from "@/lib/auth";
+import prismaProdId from "@/lib/prisma";
+import { z as zProdId } from "zod";
+import { Prisma as PrismaProdId } from "@prisma/client";
 
-import { NextResponse } from "next/server";
-import { getServerSession } from "next-auth/next";
-import { authOptions } from "@/app/api/auth/[...nextauth]/route";
-import prisma from "@/lib/prisma";
-import { z } from "zod";
-import { Prisma } from "@prisma/client";
-
-const productUpdateSchema = z.object({
-  name: z.string().min(3, "Ürün adı en az 3 karakter olmalıdır.").optional(),
-  description: z.string().optional(),
-  price: z.coerce.number().min(0, "Fiyat 0'dan küçük olamaz.").optional(),
-  stock: z.coerce.number().int("Stok tam sayı olmalıdır.").optional(),
-  categoryId: z.string().cuid("Geçersiz kategori ID'si.").optional(),
-  images: z
-    .array(z.string().url("Geçersiz resim URL'i."))
-    .min(1, "En az bir resim eklenmelidir.")
-    .optional(),
-  barcode: z.string().optional(),
+const productUpdateSchemaProdId = zProdId.object({
+  name: zProdId.string().min(3).optional(),
+  description: zProdId.string().optional(),
+  price: zProdId.coerce.number().min(0).optional(),
+  stock: zProdId.coerce.number().int().optional(),
+  categoryId: zProdId.string().cuid().optional(),
+  images: zProdId.array(zProdId.string().url()).min(1).optional(),
+  barcode: zProdId.string().optional(),
 });
 
 export async function GET(
-  req: Request,
-  { params }: { params: { productId: string } }
+  request: NextRequest,
+  { params }: { params: Promise<{ productId: string }> }
 ) {
   try {
-    if (!params.productId) {
-      return new NextResponse("Product ID is required", { status: 400 });
-    }
-    const product = await prisma.product.findUnique({
-      where: { id: params.productId },
+    if (!(await params).productId)
+      return new NextResponseProdId("Product ID is required", { status: 400 });
+    const product = await prismaProdId.product.findUnique({
+      where: { id: (await params).productId },
       include: { category: true },
     });
-    if (!product) {
-      return new NextResponse("Product not found", { status: 404 });
-    }
-    return NextResponse.json(product);
+    if (!product)
+      return new NextResponseProdId("Product not found", { status: 404 });
+    return NextResponseProdId.json(product);
   } catch (error) {
-    console.error(`GET /api/products/${params.productId} error:`, error);
-    return new NextResponse("Internal error", { status: 500 });
+    console.error(
+      `GET /api/products/${(await params).productId} error:`,
+      error
+    );
+    return new NextResponseProdId("Internal error", { status: 500 });
   }
 }
 
 export async function PATCH(
-  req: Request,
-  { params }: { params: { productId: string } }
+  request: NextRequest,
+  { params }: { params: Promise<{ productId: string }> }
 ) {
   try {
-    const session = await getServerSession(authOptions);
+    const session = await getServerSessionProdId(authOptionsProdId);
     if (!session?.user?.id || !["ADMIN", "STAFF"].includes(session.user.role)) {
-      return new NextResponse("Unauthorized", { status: 401 });
+      return new NextResponseProdId("Unauthorized", { status: 401 });
     }
-    if (!params.productId) {
-      return new NextResponse("Product ID is required", { status: 400 });
-    }
-    const body = await req.json();
-    const validation = productUpdateSchema.safeParse(body);
-    if (!validation.success) {
-      return new NextResponse(validation.error.message, { status: 400 });
-    }
-    const product = await prisma.product.update({
-      where: { id: params.productId },
+    if (!(await params).productId)
+      return new NextResponseProdId("Product ID is required", { status: 400 });
+    const body = await request.json();
+    const validation = productUpdateSchemaProdId.safeParse(body);
+    if (!validation.success)
+      return new NextResponseProdId(validation.error.message, { status: 400 });
+    const product = await prismaProdId.product.update({
+      where: { id: (await params).productId },
       data: validation.data,
     });
-    return NextResponse.json(product);
+    return NextResponseProdId.json(product);
   } catch (error) {
-    console.error(`PATCH /api/products/${params.productId} error:`, error);
-    return new NextResponse("Internal error", { status: 500 });
+    console.error(
+      `PATCH /api/products/${(await params).productId} error:`,
+      error
+    );
+    return new NextResponseProdId("Internal error", { status: 500 });
   }
 }
 
 export async function DELETE(
-  req: Request,
-  { params }: { params: { productId: string } }
+  request: NextRequestProdId,
+  { params }: { params: Promise<{ productId: string }> }
 ) {
+  const { productId } = await params;
   try {
-    const session = await getServerSession(authOptions);
+    const session = await getServerSessionProdId(authOptionsProdId);
     if (!session?.user?.id || session.user.role !== "ADMIN") {
-      return new NextResponse("Unauthorized: Admins only", { status: 401 });
+      return new NextResponseProdId("Unauthorized: Admins only", {
+        status: 401,
+      });
     }
-    if (!params.productId) {
-      return new NextResponse("Product ID is required", { status: 400 });
-    }
-    await prisma.orderItem.deleteMany({
-      where: { productId: params.productId },
+    if (!productId)
+      return new NextResponseProdId("Product ID is required", { status: 400 });
+    await prismaProdId.orderItem.deleteMany({
+      where: { productId },
     });
-    const product = await prisma.product.delete({
-      where: { id: params.productId },
+    const product = await prismaProdId.product.delete({
+      where: { id: productId },
     });
-    return NextResponse.json(product);
+    return NextResponseProdId.json(product);
   } catch (error) {
-    console.error(`DELETE /api/products/${params.productId} error:`, error);
+    console.error(`DELETE /api/products/${productId} error:`, error);
     if (
-      error instanceof Prisma.PrismaClientKnownRequestError &&
+      error instanceof PrismaProdId.PrismaClientKnownRequestError &&
       error.code === "P2025"
     ) {
-      return new NextResponse("Silinecek ürün bulunamadı.", { status: 404 });
+      return new NextResponseProdId("Silinecek ürün bulunamadı.", {
+        status: 404,
+      });
     }
-    return new NextResponse("Internal error", { status: 500 });
+    return new NextResponseProdId("Internal error", { status: 500 });
   }
 }

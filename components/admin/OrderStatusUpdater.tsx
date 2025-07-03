@@ -60,7 +60,8 @@ export function OrderStatusUpdater({
         router.refresh(); // Sayfadaki verileri yeniden yükler
         return "Sipariş durumu başarıyla güncellendi.";
       },
-      error: (err: any) => err.message,
+      // DÜZELTME: 'any' tipi yerine daha spesifik olan 'Error' tipi kullanıldı.
+      error: (err: Error) => err.message,
       finally: () => setIsUpdating(false),
     });
   };

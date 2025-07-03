@@ -1,6 +1,5 @@
 // prisma/schema.prisma
 
-// 1. Veritabanı bağlantısı ve Prisma Client tanımı
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
@@ -10,7 +9,6 @@ generator client {
   provider = "prisma-client-js"
 }
 
-// 2. Enum Tanımları
 enum UserRole {
   CUSTOMER
   STAFF
@@ -30,7 +28,7 @@ enum OrderOrigin {
   IN_STORE
 }
 
-// 3. Veritabanı Modelleri
+// --- Modeller ---
 
 model User {
   id            String    @id @default(cuid())
@@ -40,16 +38,13 @@ model User {
   image         String?
   password      String?
   role          UserRole  @default(CUSTOMER)
-
-  // İlişkiler
-  accounts  Account[]
-  sessions  Session[]
-  cart      Cart? // Her kullanıcının bir sepeti olabilir
-  orders    Order[]
-  addresses Address[]
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  accounts      Account[]
+  sessions      Session[]
+  cart          Cart?
+  orders        Order[]
+  addresses     Address[]
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
 }
 
 model Product {
@@ -61,70 +56,61 @@ model Product {
   stock       Int      @default(0)
   barcode     String?  @unique
 
-  // İlişkiler
-  category   Category?   @relation(fields: [categoryId], references: [id])
-  categoryId String?
-  orderItems OrderItem[]
-  cartItems  CartItem[] // Ürünün hangi sepetlerde olduğunu gösterir
+  // Bir ürünün bir kategorisi olabilir (opsiyonel değil, zorunlu)
+  category   Category @relation(fields: [categoryId], references: [id])
+  categoryId String
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  orderItems OrderItem[]
+  cartItems  CartItem[]
+  createdAt  DateTime    @default(now())
+  updatedAt  DateTime    @updatedAt
 }
 
+// BASİTLEŞTİRİLMİŞ KATEGORİ MODELİ
 model Category {
   id       String    @id @default(cuid())
-  name     String    @unique
+  name     String    @unique // Kategori adları benzersiz olmalı
   products Product[]
 }
 
 model Cart {
-  id String @id @default(cuid())
-
-  // İlişkiler
-  user   User       @relation(fields: [userId], references: [id], onDelete: Cascade)
-  userId String     @unique // Her kullanıcının sadece bir sepeti olabilir
-  items  CartItem[]
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id        String     @id @default(cuid())
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    String     @unique
+  items     CartItem[]
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
 }
 
 model CartItem {
-  id       String @id @default(cuid())
-  quantity Int
-
-  // İlişkiler
+  id        String  @id @default(cuid())
+  quantity  Int
   cart      Cart    @relation(fields: [cartId], references: [id], onDelete: Cascade)
   cartId    String
   product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
   productId String
 
-  @@unique([cartId, productId]) // Bir ürün bir sepete sadece bir kez eklenebilir
+  @@unique([cartId, productId])
 }
 
 model Order {
-  id     String      @id @default(cuid())
-  total  Float
-  status OrderStatus @default(PENDING)
-  origin OrderOrigin @default(ONLINE)
-
-  // İlişkiler
+  id        String      @id @default(cuid())
+  total     Float
+  status    OrderStatus @default(PENDING)
+  origin    OrderOrigin @default(ONLINE)
   user      User        @relation(fields: [userId], references: [id])
   userId    String
   items     OrderItem[]
   address   Address?    @relation(fields: [addressId], references: [id])
   addressId String?
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
 }
 
 model OrderItem {
-  id       String @id @default(cuid())
-  quantity Int
-  price    Float
-
-  // İlişkiler
+  id        String  @id @default(cuid())
+  quantity  Int
+  price     Float
   order     Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
   orderId   String
   product   Product @relation(fields: [productId], references: [id])
@@ -138,11 +124,9 @@ model Address {
   postalCode String
   country    String
   isDefault  Boolean @default(false)
-
-  // İlişkiler
-  user   User    @relation(fields: [userId], references: [id], onDelete: Cascade)
-  userId String
-  orders Order[]
+  user       User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId     String
+  orders     Order[]
 }
 
 // --- NextAuth Modelleri ---

@@ -3,7 +3,6 @@
 import Link from "next/link";
 import prisma from "@/lib/prisma";
 import { Prisma, OrderStatus } from "@prisma/client";
-
 import {
   Table,
   TableBody,
@@ -14,20 +13,19 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-// DÜZELTME: Tüm formatlama işlemleri için merkezi yardımcı fonksiyonlarımızı import ediyoruz.
 import { formatCurrency, formatDateTime } from "@/lib/formatters";
 
-// Prisma'dan gelen verinin tipini, ilişkili alanları da içerecek şekilde güvenle tanımlıyoruz.
-const orderWithDetails = Prisma.validator<Prisma.OrderDefaultArgs>()({
+// DÜZELTME: ESLint'e bu değişkenin sadece tip üretimi için kullanıldığını ve
+// bu uyarının göz ardı edilebileceğini söylüyoruz.
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+const _orderWithDetails = Prisma.validator<Prisma.OrderDefaultArgs>()({
   include: {
     user: { select: { name: true, email: true } },
     items: { select: { quantity: true } },
   },
 });
+type OrderWithDetails = Prisma.OrderGetPayload<typeof _orderWithDetails>;
 
-type OrderWithDetails = Prisma.OrderGetPayload<typeof orderWithDetails>;
-
-// Sipariş durumlarına göre stil belirleyen yardımcı fonksiyon
 const getStatusBadgeVariant = (status: OrderStatus) => {
   switch (status) {
     case "PAID":
@@ -38,12 +36,11 @@ const getStatusBadgeVariant = (status: OrderStatus) => {
       return "bg-purple-100 text-purple-800 border-purple-200 hover:bg-purple-100";
     case "CANCELLED":
       return "bg-red-100 text-red-800 border-red-200 hover:bg-red-100";
-    default: // PENDING
+    default:
       return "bg-yellow-100 text-yellow-800 border-yellow-200 hover:bg-yellow-100";
   }
 };
 
-// Enum değerlerini okunabilir etiketlere çeviren nesne
 const statusLabels: { [key in OrderStatus]: string } = {
   PENDING: "Beklemede",
   PAID: "Ödendi",
@@ -52,25 +49,13 @@ const statusLabels: { [key in OrderStatus]: string } = {
   CANCELLED: "İptal Edildi",
 };
 
-// Bu sayfa, verileri doğrudan sunucuda çeken bir Server Component'tir.
 export default async function OrdersPage() {
   const orders: OrderWithDetails[] = await prisma.order.findMany({
     include: {
-      user: {
-        select: {
-          name: true,
-          email: true,
-        },
-      },
-      items: {
-        select: {
-          quantity: true,
-        },
-      },
+      user: { select: { name: true, email: true } },
+      items: { select: { quantity: true } },
     },
-    orderBy: {
-      createdAt: "desc",
-    },
+    orderBy: { createdAt: "desc" },
   });
 
   return (
@@ -108,10 +93,7 @@ export default async function OrdersPage() {
                         order.user?.email ||
                         "Bilinmeyen Kullanıcı"}
                     </TableCell>
-                    <TableCell>
-                      {/* DÜZELTME: Artık yeni ve güvenli formatDateTime fonksiyonumuzu kullanıyoruz. */}
-                      {formatDateTime(order.createdAt)}
-                    </TableCell>
+                    <TableCell>{formatDateTime(order.createdAt)}</TableCell>
                     <TableCell>
                       <Badge
                         variant="outline"

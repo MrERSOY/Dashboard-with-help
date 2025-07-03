@@ -13,33 +13,37 @@ import {
 } from "@/components/ui/tooltip";
 import {
   LayoutDashboard,
-  Boxes, // YENİ: Stok Yönetimi için daha uygun bir ikon
+  Boxes,
   BarChart3,
   FolderKanban,
   Users2,
   FileText,
   MessageCircleQuestion,
   Settings,
-  ShoppingCart, // YENİ: POS için ikon
+  ShoppingCart,
+  ClipboardList,
 } from "lucide-react";
 
+// Navigasyon linkleri için net bir tip tanımı
 interface NavLink {
   href: string;
   label: string;
   icon: React.ElementType;
 }
 
+// Ana navigasyon linkleri listesi
 const mainNavLinks: NavLink[] = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/dashboard/pos", label: "Hızlı Satış (POS)", icon: ShoppingCart },
   { href: "/dashboard/orders", label: "Siparişler", icon: FileText },
   { href: "/dashboard/products", label: "Ürünler", icon: FolderKanban },
-  // GÜNCELLENDİ: "Stok Takibi" linki, yeni "Stok Yönetimi" sayfasıyla değiştirildi.
+  { href: "/dashboard/categories", label: "Kategoriler", icon: ClipboardList },
   { href: "/dashboard/inventory", label: "Stok Yönetimi", icon: Boxes },
   { href: "/dashboard/users", label: "Kullanıcılar", icon: Users2 },
   { href: "/dashboard/analytics", label: "Analitik", icon: BarChart3 },
 ];
 
+// İkincil navigasyon linkleri listesi
 const secondaryNavLinks: NavLink[] = [
   { href: "/dashboard/reports", label: "Raporlar", icon: FileText },
   {
@@ -54,25 +58,27 @@ export function AppSidebar() {
   const { state } = useSidebar();
   const isCollapsed = state === "collapsed";
 
-  const renderLink = (link: NavLink, isTooltip: boolean) => {
+  // Linkleri render eden fonksiyon
+  const renderLink = (link: NavLink) => {
     const isActive =
       pathname === link.href ||
       (link.href !== "/dashboard" && pathname.startsWith(link.href));
+
     const linkContent = (
       <Link
         href={link.href}
         className={cn(
           "flex items-center gap-3 rounded-lg px-3 py-2 text-gray-400 transition-all hover:text-white hover:bg-gray-800",
           { "bg-gray-800 text-white": isActive },
-          isTooltip && "justify-center"
+          isCollapsed && "justify-center"
         )}
       >
         <link.icon className="h-4 w-4" />
-        <span className={cn(isTooltip && "sr-only")}>{link.label}</span>
+        <span className={cn(isCollapsed && "sr-only")}>{link.label}</span>
       </Link>
     );
 
-    if (isTooltip) {
+    if (isCollapsed) {
       return (
         <Tooltip>
           <TooltipTrigger asChild>{linkContent}</TooltipTrigger>
@@ -100,7 +106,7 @@ export function AppSidebar() {
 
         <nav className="flex-1 mt-2 space-y-1">
           {mainNavLinks.map((link) => (
-            <div key={link.href}>{renderLink(link, isCollapsed)}</div>
+            <div key={link.href}>{renderLink(link)}</div>
           ))}
         </nav>
 
@@ -114,15 +120,16 @@ export function AppSidebar() {
             {isCollapsed ? "D" : "Documents"}
           </h2>
           {secondaryNavLinks.map((link) => (
-            <div key={link.href}>{renderLink(link, isCollapsed)}</div>
+            <div key={link.href}>{renderLink(link)}</div>
           ))}
         </div>
 
         <div className="mt-auto pt-4 border-t border-gray-800 space-y-1">
-          {renderLink(
-            { href: "/dashboard/settings", label: "Settings", icon: Settings },
-            isCollapsed
-          )}
+          {renderLink({
+            href: "/dashboard/settings",
+            label: "Settings",
+            icon: Settings,
+          })}
         </div>
       </aside>
     </TooltipProvider>

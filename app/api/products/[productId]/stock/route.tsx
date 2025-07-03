@@ -1,72 +1,52 @@
-// app/api/products/[productId]/stock/route.ts
+// Dosya: app/api/products/[productId]/stock/route.ts
+import {
+  type NextRequest as NextRequestStock,
+  NextResponse as NextResponseStock,
+} from "next/server";
+import { getServerSession as getServerSessionStock } from "next-auth/next";
+import { authOptions as authOptionsStock } from "@/lib/auth";
+import prismaStock from "@/lib/prisma";
+import { z as zStock } from "zod";
 
-import { NextResponse } from "next/server";
-import { getServerSession } from "next-auth/next";
-import { authOptions } from "@/app/api/auth/[...nextauth]/route";
-import prisma from "@/lib/prisma";
-import { z } from "zod";
-
-// Stok güncelleme için veri doğrulama şeması
-const stockUpdateSchema = z.object({
-  // 'adjustment' pozitif (ekleme) veya negatif (çıkarma) bir tam sayı olabilir.
-  adjustment: z.number().int("Ayarlama değeri bir tam sayı olmalıdır."),
+const stockUpdateSchema = zStock.object({
+  adjustment: zStock.number().int("Ayarlama değeri bir tam sayı olmalıdır."),
 });
 
-/**
- * PATCH: Belirli bir ürünün stok miktarını günceller.
- * Sadece 'ADMIN' ve 'STAFF' rollerindeki kullanıcılar tarafından erişilebilir.
- */
 export async function PATCH(
-  req: Request,
-  { params }: { params: { productId: string } }
+  req: NextRequestStock,
+  { params }: { params: Promise<{ productId: string }> }
 ) {
+  const { productId } = await params;
   try {
-    const session = await getServerSession(authOptions);
+    const session = await getServerSessionStock(authOptionsStock);
     if (!session?.user?.id || !["ADMIN", "STAFF"].includes(session.user.role)) {
-      return new NextResponse("Unauthorized", { status: 401 });
+      return new NextResponseStock("Unauthorized", { status: 401 });
     }
-
-    if (!params.productId) {
-      return new NextResponse("Product ID is required", { status: 400 });
+    if (!productId) {
+      return new NextResponseStock("Product ID is required", { status: 400 });
     }
-
     const body = await req.json();
     const validation = stockUpdateSchema.safeParse(body);
-
     if (!validation.success) {
-      return new NextResponse(validation.error.message, { status: 400 });
+      return new NextResponseStock(validation.error.message, { status: 400 });
     }
-
     const { adjustment } = validation.data;
-
-    // Prisma'nın atomik operasyonlarını kullanarak stok miktarını güncelle.
-    // 'increment' metodu, negatif değerler için otomatik olarak 'decrement' işlemi yapar.
-    const updatedProduct = await prisma.product.update({
-      where: {
-        id: params.productId,
-      },
-      data: {
-        stock: {
-          increment: adjustment,
-        },
-      },
+    const updatedProduct = await prismaStock.product.update({
+      where: { id: productId },
+      data: { stock: { increment: adjustment } },
     });
-
-    // Yeni stok miktarı negatif olamaz kontrolü
     if (updatedProduct.stock < 0) {
-      // Eğer stok negatif olursa, işlemi geri al ve hata döndür.
-      await prisma.product.update({
-        where: { id: params.productId },
-        data: { stock: { decrement: adjustment } }, // Yapılan işlemi geri al
+      await prismaStock.product.update({
+        where: { id: productId },
+        data: { stock: { decrement: adjustment } },
       });
-      return new NextResponse("Stok miktarı sıfırın altına düşemez.", {
+      return new NextResponseStock("Stok miktarı sıfırın altına düşemez.", {
         status: 400,
       });
     }
-
-    return NextResponse.json(updatedProduct);
+    return NextResponseStock.json(updatedProduct);
   } catch (error) {
     console.error("[STOCK_PATCH]", error);
-    return new NextResponse("Internal error", { status: 500 });
+    return new NextResponseStock("Internal error", { status: 500 });
   }
 }

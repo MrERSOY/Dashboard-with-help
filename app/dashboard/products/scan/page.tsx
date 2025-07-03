@@ -11,14 +11,12 @@ export default function ScanPage() {
 
   const handleScanSuccess = (barcode: string) => {
     console.log(`Barkod okundu: ${barcode}`);
-    // Barkod okunduğunda, kullanıcıyı yeni ürün ekleme sayfasına yönlendir.
-    // Barkod numarası URL'e bir query parametresi olarak eklenir.
     router.push(`/dashboard/products/new?barcode=${barcode}`);
   };
 
-  const handleScanError = (error: any) => {
+  // DÜZELTME: 'any' tipi yerine daha spesifik olan 'Error' tipi kullanıldı.
+  const handleScanError = (error: Error) => {
     console.error("Barkod okuma hatası:", error);
-    // Hata durumunda kullanıcıya bir bildirim gösterilebilir.
   };
 
   return (
